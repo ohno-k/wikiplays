@@ -75,7 +75,7 @@ $env:STRIPE_PRICE_ID_PREMIUM="price_xxxxx"
 - `STRIPE_WEBHOOK_SECRET`: 本番 Webhook の `whsec_xxxxx`
 - `STRIPE_PRICE_ID_PREMIUM`: 本番モードで作った `price_xxxxx`
 - `JWT_SECRET`: 強力なランダム文字列 (例: `openssl rand -base64 64`)
-- `FRONTEND_URL`: `https://wikiplays.com`
+- `FRONTEND_URL`: `https://wikiplays.me`
 
 ## 6. テスト用クレジットカード
 

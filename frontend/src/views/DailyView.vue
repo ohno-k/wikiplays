@@ -233,7 +233,7 @@ const shareText = computed(() => {
   const emojis = qResults.value.map(r => scoreEmoji(r.score, 1000)).join('')
   const scopeLabel = scopeMeta.value ? `${scopeMeta.value.emoji}${scopeMeta.value.name}` : ''
   const genreLabel = genreMeta.value ? `${genreMeta.value.emoji}${genreMeta.value.name}` : '総合'
-  return `Wikiplays デイリー ${challenge.value.date} ${scopeLabel}${genreLabel}\n${totalScore.value}/${1000 * TOTAL_QUESTIONS}\n${emojis}\nhttps://wikiplays.example/daily`
+  return `Wikiplays デイリー ${challenge.value.date} ${scopeLabel}${genreLabel}\n${totalScore.value}/${1000 * TOTAL_QUESTIONS}\n${emojis}\nhttps://wikiplays.me/daily`
 })
 
 function isCorrectFinal(): boolean {

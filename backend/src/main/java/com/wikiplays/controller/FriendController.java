@@ -7,7 +7,6 @@ import com.wikiplays.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,7 +24,6 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/friends")
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:4173"})
 public class FriendController {
 
     private final FriendshipRepository friendshipRepository;

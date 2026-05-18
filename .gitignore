@@ -1,8 +1,34 @@
+# ===========================
+#  Wikiplays root .gitignore
+# ===========================
+
+# Build outputs
 node_modules/
 dist/
 target/
+*.class
+
+# IDE / editor
 .idea/
 .vscode/
 *.iml
-*.log
 .DS_Store
+
+# Logs
+*.log
+
+# シークレットファイル (絶対にコミットしない)
+**/application-secrets.yml
+.env
+.env.local
+.env.*.local
+
+# Claude / Antigravity / Cursor / Gemini CLI のローカルキャッシュ等
+# .agents ディレクトリにある skills は保持 (Stripe Skills 等は git 管理対象)
+.claude/cache/
+# .claude/skills/ は .agents/skills/ へのローカル symlink なので除外 (Windows 絶対パス)
+.claude/skills/
+
+# 一時ファイル
+*.tmp
+*.swp

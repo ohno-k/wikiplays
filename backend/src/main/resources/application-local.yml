@@ -1,4 +1,8 @@
 spring:
+  # 任意で application-secrets.yml を読み込む (Git 管理外)
+  # シークレット (Stripe 秘密鍵・SMTP 認証情報・OAuth Client Secret) はそこに書く
+  config:
+    import: "optional:classpath:application-secrets.yml"
   datasource:
     url: jdbc:h2:mem:wikiplays;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver

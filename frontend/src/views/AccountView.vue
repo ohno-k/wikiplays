@@ -9,6 +9,23 @@ const { user, isLoggedIn, isPremium, logout, refresh, authFetch } = useAuth()
 
 const message = ref<string | null>(null)
 const loading = ref(false)
+const loadingPlan = ref<string | null>(null)
+
+interface PlanInfo {
+  id: '1m' | '3m' | '6m'
+  name: string
+  price: number
+  months: number
+  perMonth: number
+  discountLabel?: string
+  highlight?: boolean
+}
+
+const PLANS: PlanInfo[] = [
+  { id: '1m', name: '月額プラン',  price: 500,  months: 1, perMonth: 500 },
+  { id: '3m', name: '3 ヶ月プラン', price: 1300, months: 3, perMonth: 433, discountLabel: '13% お得' },
+  { id: '6m', name: '6 ヶ月プラン', price: 2000, months: 6, perMonth: 333, discountLabel: '33% お得', highlight: true },
+]
 
 onMounted(async () => {
   if (!isLoggedIn.value) {
@@ -23,11 +40,12 @@ onMounted(async () => {
   }
 })
 
-async function upgrade() {
+async function upgrade(planId: string) {
+  loadingPlan.value = planId
   loading.value = true
   message.value = null
   try {
-    const res = await authFetch('/api/subscription/checkout', { method: 'POST' })
+    const res = await authFetch(`/api/subscription/checkout?plan=${planId}`, { method: 'POST' })
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: 'エラー' }))
       throw new Error(err.message)
@@ -38,6 +56,7 @@ async function upgrade() {
     message.value = e instanceof Error ? e.message : 'アップグレード失敗'
   } finally {
     loading.value = false
+    loadingPlan.value = null
   }
 }
 
@@ -102,10 +121,6 @@ const planLabel = computed(() => {
           <li>コミュニティジャンルの作成 (フリーは閲覧のみ)</li>
           <li>広告非表示</li>
         </ul>
-        <button @click="upgrade" :disabled="loading"
-          class="w-full px-4 py-3 bg-gradient-to-r from-amber-500 to-rose-500 text-white rounded-lg font-bold shadow-md hover:shadow-lg transition disabled:opacity-50">
-          {{ loading ? '読み込み中…' : 'プレミアムにアップグレード (月 ¥500)' }}
-        </button>
       </div>
 
       <div v-else class="space-y-3 pt-2">
@@ -116,6 +131,45 @@ const planLabel = computed(() => {
           class="w-full px-4 py-2 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 disabled:opacity-50">
           {{ loading ? '読み込み中…' : '支払い・解約の管理 (Stripe)' }}
         </button>
+      </div>
+    </div>
+
+    <!-- 3 プラン選択 (未加入時のみ) -->
+    <div v-if="!isPremium" class="space-y-3">
+      <div class="text-sm font-bold text-slate-700 px-1">プランを選んでアップグレード</div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div v-for="plan in PLANS" :key="plan.id"
+          :class="[
+            'glass-card overflow-hidden p-5 space-y-3 relative',
+            plan.highlight ? 'ring-2 ring-amber-400' : ''
+          ]">
+          <div v-if="plan.highlight" class="absolute top-0 right-0 px-2 py-1 bg-gradient-to-r from-amber-400 to-rose-400 text-white text-xs font-bold rounded-bl-lg">
+            おすすめ
+          </div>
+          <div class="text-xs font-mono text-slate-500">{{ plan.months }} ヶ月</div>
+          <div class="text-lg font-bold">{{ plan.name }}</div>
+          <div>
+            <div class="text-3xl font-bold number-display brand-text">¥{{ plan.price.toLocaleString() }}</div>
+            <div class="text-xs text-slate-500 mt-1">
+              月あたり ¥{{ plan.perMonth.toLocaleString() }}
+              <span v-if="plan.discountLabel" class="ml-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">
+                {{ plan.discountLabel }}
+              </span>
+            </div>
+          </div>
+          <button @click="upgrade(plan.id)" :disabled="loading"
+            :class="[
+              'w-full px-4 py-2 rounded font-bold text-white shadow-md hover:shadow-lg transition disabled:opacity-50',
+              plan.highlight
+                ? 'bg-gradient-to-r from-amber-500 to-rose-500'
+                : 'bg-gradient-to-r from-slate-600 to-slate-700'
+            ]">
+            {{ loadingPlan === plan.id ? '読み込み中…' : 'このプランで申込' }}
+          </button>
+        </div>
+      </div>
+      <div class="text-xs text-slate-400 text-center pt-1">
+        支払いは Stripe を通じて安全に行われます。いつでもキャンセル可能。
       </div>
     </div>
 

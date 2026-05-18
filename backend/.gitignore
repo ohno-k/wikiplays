@@ -4,3 +4,10 @@ target/
 *.iml
 .vscode/
 .DS_Store
+
+# シークレットを含むローカル設定 (Stripe・SMTP・OAuth キー等)
+# このファイルは絶対に Git にコミットしない
+src/main/resources/application-secrets.yml
+.env
+.env.local
+*.local.env

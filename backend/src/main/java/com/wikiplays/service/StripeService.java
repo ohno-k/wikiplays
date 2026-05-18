@@ -17,11 +17,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 /**
  * Stripe との連携。
  * Checkout Session の作成、Webhook の受信、サブスク状態の更新を担う。
+ *
+ * プラン:
+ * - "1m": 月額 ¥500
+ * - "3m": 3 ヶ月 ¥1,300 (割引)
+ * - "6m": 6 ヶ月 ¥2,000 (大きな割引)
  */
 @Service
 public class StripeService {
@@ -32,7 +39,7 @@ public class StripeService {
     private final SubscriptionRepository subscriptionRepository;
     private final String secretKey;
     private final String webhookSecret;
-    private final String premiumPriceId;
+    private final Map<String, String> priceIds; // plan key -> Stripe Price ID
     private final String frontendUrl;
 
     public StripeService(
@@ -40,25 +47,48 @@ public class StripeService {
         SubscriptionRepository subscriptionRepository,
         @Value("${wikiplays.stripe.secret-key:}") String secretKey,
         @Value("${wikiplays.stripe.webhook-secret:}") String webhookSecret,
-        @Value("${wikiplays.stripe.price-id-premium:}") String premiumPriceId,
+        @Value("${wikiplays.stripe.price-id-1m:}") String priceId1m,
+        @Value("${wikiplays.stripe.price-id-3m:}") String priceId3m,
+        @Value("${wikiplays.stripe.price-id-6m:}") String priceId6m,
+        @Value("${wikiplays.stripe.price-id-premium:}") String legacyPriceId,
         @Value("${wikiplays.frontend-url:http://localhost:5173}") String frontendUrl
     ) {
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.secretKey = secretKey;
         this.webhookSecret = webhookSecret;
-        this.premiumPriceId = premiumPriceId;
         this.frontendUrl = frontendUrl;
+
+        this.priceIds = new HashMap<>();
+        if (!priceId1m.isBlank()) priceIds.put("1m", priceId1m);
+        if (!priceId3m.isBlank()) priceIds.put("3m", priceId3m);
+        if (!priceId6m.isBlank()) priceIds.put("6m", priceId6m);
+        // 互換性: 旧 PRICE_ID_PREMIUM が設定されているが新しい 1m が空ならそれを 1m として使う
+        if (priceIds.get("1m") == null && !legacyPriceId.isBlank()) {
+            priceIds.put("1m", legacyPriceId);
+        }
+
         if (secretKey != null && !secretKey.isBlank()) {
             Stripe.apiKey = secretKey;
         }
     }
 
-    /** Premium プランの Checkout Session を作成し、リダイレクト先 URL を返す。 */
-    public String createCheckoutSession(User user) throws StripeException {
-        ensureConfigured();
+    /** 利用可能なプランの key 一覧。 */
+    public java.util.Set<String> getAvailablePlans() {
+        return priceIds.keySet();
+    }
 
-        // 既存の Stripe Customer ID を取得 (なければ Stripe Checkout 内で自動作成される)
+    /**
+     * 指定プランの Checkout Session を作成し、リダイレクト先 URL を返す。
+     * plan: "1m" / "3m" / "6m" のいずれか。
+     */
+    public String createCheckoutSession(User user, String plan) throws StripeException {
+        ensureConfigured();
+        String priceId = priceIds.get(plan);
+        if (priceId == null) {
+            throw new IllegalArgumentException("不明なプラン: " + plan + " (利用可能: " + priceIds.keySet() + ")");
+        }
+
         Optional<Subscription> subOpt = subscriptionRepository.findByUserId(user.getId());
         String customerId = subOpt.map(Subscription::getStripeCustomerId).orElse(null);
 
@@ -67,10 +97,11 @@ public class StripeService {
             .setSuccessUrl(frontendUrl + "/account?subscribed=1")
             .setCancelUrl(frontendUrl + "/account?cancelled=1")
             .addLineItem(SessionCreateParams.LineItem.builder()
-                .setPrice(premiumPriceId)
+                .setPrice(priceId)
                 .setQuantity(1L)
                 .build())
-            .putMetadata("user_id", String.valueOf(user.getId()));
+            .putMetadata("user_id", String.valueOf(user.getId()))
+            .putMetadata("plan", plan);
 
         if (customerId != null && !customerId.isBlank()) {
             builder.setCustomer(customerId);
@@ -181,8 +212,7 @@ public class StripeService {
     }
 
     private void handlePaymentFailed(Event event) {
-        // Stripe 側で自動リトライされる。状態のみ "PAST_DUE" に。
-        // Subscription オブジェクトとの紐付けが必要だが今回は省略。
+        // Stripe 側で自動リトライされる。
     }
 
     private String mapStripeStatus(String stripeStatus) {
@@ -197,10 +227,10 @@ public class StripeService {
 
     private void ensureConfigured() {
         if (secretKey == null || secretKey.isBlank()) {
-            throw new IllegalStateException("Stripe secret key 未設定です (環境変数 STRIPE_SECRET_KEY)");
+            throw new IllegalStateException("Stripe secret key 未設定です (STRIPE_SECRET_KEY)");
         }
-        if (premiumPriceId == null || premiumPriceId.isBlank()) {
-            throw new IllegalStateException("Stripe price ID 未設定です (環境変数 STRIPE_PRICE_ID_PREMIUM)");
+        if (priceIds.isEmpty()) {
+            throw new IllegalStateException("Stripe Price ID が一つも設定されていません (STRIPE_PRICE_ID_1M 等)");
         }
     }
 }

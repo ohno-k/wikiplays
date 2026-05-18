@@ -125,7 +125,7 @@ async function shareViaWebShare() {
           <span v-for="(r, i) in results" :key="i">{{ scoreEmoji(r.score, maxScore / results.length) }}</span>
         </div>
 
-        <div class="text-xs opacity-70 mt-3">wikiplays.example</div>
+        <div class="text-xs opacity-70 mt-3">wikiplays.me</div>
       </div>
     </div>
 

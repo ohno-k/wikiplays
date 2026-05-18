@@ -16,7 +16,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,7 +34,6 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/community-genres")
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:4173"})
 public class CustomGenreController {
 
     private static final Logger log = LoggerFactory.getLogger(CustomGenreController.class);

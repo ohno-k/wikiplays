@@ -12,7 +12,6 @@ import com.wikiplays.service.DailyChallengeService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,7 +25,6 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/daily")
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:4173"})
 public class DailyController {
 
     private final DailyChallengeService service;

@@ -2,7 +2,6 @@ package com.wikiplays.controller;
 
 import com.wikiplays.service.EmailVerificationService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,7 +11,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/email")
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:4173"})
 public class EmailVerificationController {
 
     private final EmailVerificationService service;

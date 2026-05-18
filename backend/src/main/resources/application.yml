@@ -11,6 +11,19 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+  # Google OAuth は GOOGLE_CLIENT_ID を環境変数 (or application-secrets.yml) で設定した時のみ
+  # SecurityConfig が条件付きで oauth2Login を有効化する。
 
 server:
   port: 8080
@@ -24,3 +37,9 @@ wikiplays:
     webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
     price-id-premium: ${STRIPE_PRICE_ID_PREMIUM:}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  mail:
+    from: ${MAIL_FROM:no-reply@wikiplays.me}
+  cors:
+    # 本番では環境変数 WIKIPLAYS_ALLOWED_ORIGINS で上書き
+    # 例: "https://wikiplays.me,https://www.wikiplays.me"
+    allowed-origins: ${WIKIPLAYS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173,https://wikiplays.me,https://www.wikiplays.me}

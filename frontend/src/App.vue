@@ -50,10 +50,21 @@ onMounted(() => {
       <RouterView />
     </main>
 
-    <footer class="text-center text-xs text-slate-400 py-6 border-t border-slate-200/60 mt-12">
-      コンテンツは
-      <a href="https://ja.wikipedia.org/" target="_blank" rel="noopener" class="underline hover:text-slate-600">日本語版 Wikipedia</a>
-      (CC BY-SA 4.0) を利用しています
+    <footer class="text-xs text-slate-400 py-6 border-t border-slate-200/60 mt-12">
+      <div class="max-w-5xl mx-auto px-4 space-y-2">
+        <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+          <RouterLink to="/about" class="hover:text-slate-600 hover:underline">About</RouterLink>
+          <span class="opacity-30">·</span>
+          <RouterLink to="/rules" class="hover:text-slate-600 hover:underline">遊び方</RouterLink>
+          <span class="opacity-30">·</span>
+          <a href="mailto:wikiplays416@gmail.com" class="hover:text-slate-600 hover:underline">お問い合わせ</a>
+        </div>
+        <div class="text-center">
+          コンテンツは
+          <a href="https://ja.wikipedia.org/" target="_blank" rel="noopener" class="underline hover:text-slate-600">日本語版 Wikipedia</a>
+          (CC BY-SA 4.0) を利用しています
+        </div>
+      </div>
     </footer>
   </div>
 </template>

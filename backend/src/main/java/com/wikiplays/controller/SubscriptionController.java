@@ -8,11 +8,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
@@ -20,7 +20,6 @@ import java.util.Map;
 import java.util.Optional;
 
 @RestController
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:4173"})
 public class SubscriptionController {
 
     private static final Logger log = LoggerFactory.getLogger(SubscriptionController.class);
@@ -53,15 +52,26 @@ public class SubscriptionController {
         ));
     }
 
-    /** Premium プランへのアップグレード用 Checkout URL を返す。 */
+    /** 利用可能なプラン一覧 (UI 表示用)。 */
+    @GetMapping("/api/subscription/plans")
+    public ResponseEntity<?> plans() {
+        return ResponseEntity.ok(Map.of("plans", stripeService.getAvailablePlans()));
+    }
+
+    /** プレミアムプランへのアップグレード用 Checkout URL を返す。 */
     @PostMapping("/api/subscription/checkout")
-    public ResponseEntity<?> checkout(Authentication auth) {
+    public ResponseEntity<?> checkout(
+        @RequestParam(value = "plan", defaultValue = "1m") String plan,
+        Authentication auth
+    ) {
         if (auth == null || !(auth.getPrincipal() instanceof User user)) {
             return ResponseEntity.status(401).build();
         }
         try {
-            String url = stripeService.createCheckoutSession(user);
+            String url = stripeService.createCheckoutSession(user, plan);
             return ResponseEntity.ok(Map.of("url", url));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(503).body(Map.of("message", e.getMessage()));
         } catch (Exception e) {

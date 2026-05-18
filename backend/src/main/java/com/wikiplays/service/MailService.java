@@ -26,7 +26,7 @@ public class MailService {
 
     public MailService(
         JavaMailSender mailSender,
-        @Value("${wikiplays.mail.from:no-reply@wikiplays.example}") String fromAddress,
+        @Value("${wikiplays.mail.from:no-reply@wikiplays.me}") String fromAddress,
         @Value("${wikiplays.frontend-url:http://localhost:5173}") String frontendUrl,
         @Value("${MAIL_HOST:}") String mailHostEnv
     ) {

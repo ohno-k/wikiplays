@@ -3,7 +3,6 @@ package com.wikiplays.controller;
 import com.wikiplays.dto.LeaderboardEntry;
 import com.wikiplays.repository.PlayRecordRepository;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -18,7 +17,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/leaderboard")
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:4173"})
 public class LeaderboardController {
 
     private static final ZoneId TZ = ZoneId.of("Asia/Tokyo");

@@ -4,3 +4,8 @@ dist
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# 環境変数 (Stripe publishable key 等)
+.env
+.env.local
+.env.*.local
