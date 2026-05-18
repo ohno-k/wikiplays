@@ -103,6 +103,33 @@ const CONTACT_EMAIL = 'wikiplays416@gmail.com'
       </p>
     </div>
 
+    <!-- 課金・サブスクリプションについて -->
+    <div class="glass-card p-5 space-y-3">
+      <h2 class="text-xl font-bold">💳 課金・サブスクリプションについて</h2>
+      <p class="text-sm text-slate-700 leading-relaxed">
+        プレミアムプランは以下の 3 種類があります:
+      </p>
+      <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+        <li>月額プラン: ¥500 / 月</li>
+        <li>3 ヶ月プラン: ¥1,300 (月あたり ¥433)</li>
+        <li>6 ヶ月プラン: ¥2,000 (月あたり ¥333)</li>
+      </ul>
+      <div class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm space-y-1">
+        <div class="font-bold text-emerald-700">🎁 初回 7 日間無料体験</div>
+        <div class="text-xs text-emerald-700">
+          初めてプレミアムプランに登録するユーザーには 7 日間の無料体験が付きます。
+          <strong>無料期間中にキャンセルすれば請求は発生しません。</strong>
+          無料期間終了時に選択したプランの金額が自動的に課金され、その後はプラン期間ごとに自動更新されます。
+        </div>
+      </div>
+      <ul class="text-xs text-slate-600 space-y-1 list-disc list-inside">
+        <li>支払い方法: クレジットカード (Stripe 経由)</li>
+        <li>引き渡し時期: 決済完了 (または無料期間開始) 直後にプレミアム機能が解放されます</li>
+        <li>キャンセル: アカウントページの「支払い・解約の管理」からいつでも可能。期間途中で解約しても、現在の期間終了までは引き続きご利用いただけます (日割り返金なし)</li>
+        <li>再登録時: 2 回目以降のプレミアム加入は無料期間なしで即時課金になります</li>
+      </ul>
+    </div>
+
     <!-- 法的情報リンク (将来用) -->
     <div class="text-center text-xs text-slate-400 pt-4">
       <p>© Wikiplays. All wiki content under CC BY-SA 4.0.</p>

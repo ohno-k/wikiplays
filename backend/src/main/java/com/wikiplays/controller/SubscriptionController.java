@@ -38,18 +38,28 @@ public class SubscriptionController {
         if (auth == null || !(auth.getPrincipal() instanceof User user)) {
             return ResponseEntity.status(401).build();
         }
+        boolean trialEligible = stripeService.isTrialEligible(user);
         Optional<Subscription> sub = subscriptionRepository.findByUserId(user.getId());
         if (sub.isEmpty()) {
-            return ResponseEntity.ok(Map.of("plan", "FREE", "status", "ACTIVE", "premiumActive", false));
+            Map<String, Object> body = new java.util.HashMap<>();
+            body.put("plan", "FREE");
+            body.put("status", "ACTIVE");
+            body.put("premiumActive", false);
+            body.put("trialing", false);
+            body.put("trialEligible", trialEligible);
+            return ResponseEntity.ok(body);
         }
         Subscription s = sub.get();
-        return ResponseEntity.ok(Map.of(
-            "plan", s.getPlan(),
-            "status", s.getStatus(),
-            "premiumActive", s.isPremiumActive(),
-            "currentPeriodEnd", s.getCurrentPeriodEnd() != null ? s.getCurrentPeriodEnd() : Instant.EPOCH,
-            "cancelledAt", s.getCancelledAt() != null ? s.getCancelledAt() : Instant.EPOCH
-        ));
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("plan", s.getPlan());
+        body.put("status", s.getStatus());
+        body.put("premiumActive", s.isPremiumActive());
+        body.put("trialing", s.isTrialing());
+        body.put("trialEligible", trialEligible);
+        body.put("currentPeriodEnd", s.getCurrentPeriodEnd() != null ? s.getCurrentPeriodEnd() : Instant.EPOCH);
+        body.put("trialEnd", s.getTrialEnd() != null ? s.getTrialEnd() : Instant.EPOCH);
+        body.put("cancelledAt", s.getCancelledAt() != null ? s.getCancelledAt() : Instant.EPOCH);
+        return ResponseEntity.ok(body);
     }
 
     /** 利用可能なプラン一覧 (UI 表示用)。 */

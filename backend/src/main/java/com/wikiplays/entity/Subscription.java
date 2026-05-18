@@ -37,9 +37,13 @@ public class Subscription {
     @Column(nullable = false, length = 16)
     private String plan = "FREE";
 
-    /** "ACTIVE" / "CANCELLED" / "EXPIRED" / "PAST_DUE" / "INCOMPLETE" */
+    /** "ACTIVE" / "TRIALING" / "CANCELLED" / "EXPIRED" / "PAST_DUE" / "INCOMPLETE" */
     @Column(nullable = false, length = 16)
     private String status = "ACTIVE";
+
+    /** トライアル期間の終了時刻 (TRIALING の場合に値あり)。 */
+    @Column
+    private Instant trialEnd;
 
     @Column(name = "stripe_customer_id", length = 64)
     private String stripeCustomerId;
@@ -77,16 +81,22 @@ public class Subscription {
     public void setCurrentPeriodEnd(Instant currentPeriodEnd) { this.currentPeriodEnd = currentPeriodEnd; }
     public Instant getCancelledAt() { return cancelledAt; }
     public void setCancelledAt(Instant cancelledAt) { this.cancelledAt = cancelledAt; }
+    public Instant getTrialEnd() { return trialEnd; }
+    public void setTrialEnd(Instant trialEnd) { this.trialEnd = trialEnd; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 
-    /** Premium が有効期間内か。 */
+    /** Premium が有効期間内か (トライアル中も含む)。 */
     public boolean isPremiumActive() {
         if (!"PREMIUM".equals(plan)) return false;
-        if (!"ACTIVE".equals(status) && !"CANCELLED".equals(status)) return false;
-        if (currentPeriodEnd == null) return "ACTIVE".equals(status);
+        if (!"ACTIVE".equals(status) && !"TRIALING".equals(status) && !"CANCELLED".equals(status)) return false;
+        if (currentPeriodEnd == null) return "ACTIVE".equals(status) || "TRIALING".equals(status);
         return Instant.now().isBefore(currentPeriodEnd);
+    }
+
+    public boolean isTrialing() {
+        return "TRIALING".equals(status);
     }
 }

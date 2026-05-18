@@ -78,9 +78,14 @@ public class StripeService {
         return priceIds.keySet();
     }
 
+    /** 初回トライアルの日数 (7 日)。 */
+    private static final long TRIAL_PERIOD_DAYS = 7;
+
     /**
      * 指定プランの Checkout Session を作成し、リダイレクト先 URL を返す。
      * plan: "1m" / "3m" / "6m" のいずれか。
+     * 初回のみ 7 日間トライアル付き。過去に Stripe サブスクを作成したことがある
+     * ユーザー (stripe_subscription_id が設定されている) はトライアル対象外。
      */
     public String createCheckoutSession(User user, String plan) throws StripeException {
         ensureConfigured();
@@ -91,6 +96,9 @@ public class StripeService {
 
         Optional<Subscription> subOpt = subscriptionRepository.findByUserId(user.getId());
         String customerId = subOpt.map(Subscription::getStripeCustomerId).orElse(null);
+        boolean trialEligible = subOpt
+            .map(s -> s.getStripeSubscriptionId() == null || s.getStripeSubscriptionId().isBlank())
+            .orElse(true);
 
         SessionCreateParams.Builder builder = SessionCreateParams.builder()
             .setMode(SessionCreateParams.Mode.SUBSCRIPTION)
@@ -103,6 +111,14 @@ public class StripeService {
             .putMetadata("user_id", String.valueOf(user.getId()))
             .putMetadata("plan", plan);
 
+        if (trialEligible) {
+            builder.setSubscriptionData(
+                SessionCreateParams.SubscriptionData.builder()
+                    .setTrialPeriodDays(TRIAL_PERIOD_DAYS)
+                    .build()
+            );
+        }
+
         if (customerId != null && !customerId.isBlank()) {
             builder.setCustomer(customerId);
         } else {
@@ -111,6 +127,13 @@ public class StripeService {
 
         Session session = Session.create(builder.build());
         return session.getUrl();
+    }
+
+    /** ユーザーが今 (新規) Checkout で 7 日間トライアルの対象かどうか。 */
+    public boolean isTrialEligible(User user) {
+        return subscriptionRepository.findByUserId(user.getId())
+            .map(s -> s.getStripeSubscriptionId() == null || s.getStripeSubscriptionId().isBlank())
+            .orElse(true);
     }
 
     /** Stripe Customer Portal セッション (解約・更新管理) の URL を返す。 */
@@ -144,6 +167,7 @@ public class StripeService {
             case "checkout.session.completed" -> handleCheckoutCompleted(event);
             case "customer.subscription.updated", "customer.subscription.created" -> handleSubscriptionChanged(event);
             case "customer.subscription.deleted" -> handleSubscriptionDeleted(event);
+            case "customer.subscription.trial_will_end" -> handleTrialWillEnd(event);
             case "invoice.payment_failed" -> handlePaymentFailed(event);
             default -> {} // 他は無視
         }
@@ -189,11 +213,37 @@ public class StripeService {
         if (stripeSub.getCurrentPeriodEnd() != null) {
             sub.setCurrentPeriodEnd(Instant.ofEpochSecond(stripeSub.getCurrentPeriodEnd()));
         }
+        // トライアル終了時刻 (trialing でなくなれば null になる)
+        if (stripeSub.getTrialEnd() != null) {
+            sub.setTrialEnd(Instant.ofEpochSecond(stripeSub.getTrialEnd()));
+        } else {
+            sub.setTrialEnd(null);
+        }
         if (Boolean.TRUE.equals(stripeSub.getCancelAtPeriodEnd())) {
             sub.setCancelledAt(Instant.now());
         }
         sub.setUpdatedAt(Instant.now());
         subscriptionRepository.save(sub);
+    }
+
+    /** トライアル終了 3 日前の Webhook。現状はログのみ。
+     *  将来的にはここで「もうすぐ課金開始」メール送信を実装する。 */
+    private void handleTrialWillEnd(Event event) {
+        Optional<com.stripe.model.Subscription> stripeSubOpt = event.getDataObjectDeserializer().getObject()
+            .filter(o -> o instanceof com.stripe.model.Subscription)
+            .map(o -> (com.stripe.model.Subscription) o);
+        if (stripeSubOpt.isEmpty()) return;
+        com.stripe.model.Subscription stripeSub = stripeSubOpt.get();
+        log.info("Stripe trial_will_end: subscription={}, trialEnd={}",
+            stripeSub.getId(), stripeSub.getTrialEnd());
+        // 既存の Subscription レコードも更新しておく
+        subscriptionRepository.findByStripeSubscriptionId(stripeSub.getId()).ifPresent(sub -> {
+            if (stripeSub.getTrialEnd() != null) {
+                sub.setTrialEnd(Instant.ofEpochSecond(stripeSub.getTrialEnd()));
+                sub.setUpdatedAt(Instant.now());
+                subscriptionRepository.save(sub);
+            }
+        });
     }
 
     private void handleSubscriptionDeleted(Event event) {
@@ -217,7 +267,8 @@ public class StripeService {
 
     private String mapStripeStatus(String stripeStatus) {
         return switch (stripeStatus) {
-            case "active", "trialing" -> "ACTIVE";
+            case "active" -> "ACTIVE";
+            case "trialing" -> "TRIALING";
             case "canceled" -> "EXPIRED";
             case "past_due", "unpaid" -> "PAST_DUE";
             case "incomplete", "incomplete_expired" -> "INCOMPLETE";

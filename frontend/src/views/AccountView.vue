@@ -11,6 +11,33 @@ const message = ref<string | null>(null)
 const loading = ref(false)
 const loadingPlan = ref<string | null>(null)
 
+interface SubscriptionInfo {
+  plan: 'FREE' | 'PREMIUM'
+  status: string
+  premiumActive: boolean
+  trialing: boolean
+  trialEligible: boolean
+  trialEnd?: string
+  currentPeriodEnd?: string
+  cancelledAt?: string
+}
+const subInfo = ref<SubscriptionInfo | null>(null)
+
+const trialDaysLeft = computed(() => {
+  if (!subInfo.value?.trialing || !subInfo.value.trialEnd) return 0
+  const end = new Date(subInfo.value.trialEnd).getTime()
+  const now = Date.now()
+  const ms = Math.max(0, end - now)
+  return Math.ceil(ms / (1000 * 60 * 60 * 24))
+})
+
+async function fetchSubInfo() {
+  try {
+    const res = await authFetch('/api/subscription/me')
+    if (res.ok) subInfo.value = await res.json()
+  } catch {}
+}
+
 interface PlanInfo {
   id: '1m' | '3m' | '6m'
   name: string
@@ -32,9 +59,11 @@ onMounted(async () => {
     router.replace('/login')
     return
   }
-  await refresh()
+  await Promise.all([refresh(), fetchSubInfo()])
   if (route.query.subscribed) {
-    message.value = '✅ プレミアムプランへの登録が完了しました!'
+    message.value = subInfo.value?.trialing
+      ? '✅ 7 日間の無料体験を開始しました!'
+      : '✅ プレミアムプランへの登録が完了しました!'
   } else if (route.query.cancelled) {
     message.value = '決済をキャンセルしました'
   }
@@ -103,10 +132,22 @@ const planLabel = computed(() => {
         <div>
           <div class="text-xs font-mono text-slate-500">CURRENT PLAN</div>
           <div class="text-xl font-bold mt-1 flex items-center gap-2">
-            <span v-if="isPremium" class="px-2 py-0.5 text-sm rounded bg-gradient-to-r from-amber-400 to-rose-400 text-white">⭐ PREMIUM</span>
+            <span v-if="subInfo?.trialing" class="px-2 py-0.5 text-sm rounded bg-gradient-to-r from-emerald-400 to-teal-400 text-white">🎁 トライアル中</span>
+            <span v-else-if="isPremium" class="px-2 py-0.5 text-sm rounded bg-gradient-to-r from-amber-400 to-rose-400 text-white">⭐ PREMIUM</span>
             <span v-else class="px-2 py-0.5 text-sm rounded bg-slate-200 text-slate-600">FREE</span>
             <span>{{ planLabel }}プラン</span>
           </div>
+        </div>
+      </div>
+
+      <!-- トライアル中の案内 -->
+      <div v-if="subInfo?.trialing" class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm space-y-1">
+        <div class="font-bold text-emerald-700">
+          🎁 7 日間無料体験中 (あと {{ trialDaysLeft }} 日)
+        </div>
+        <div class="text-xs text-emerald-700">
+          {{ subInfo.trialEnd ? new Date(subInfo.trialEnd).toLocaleDateString('ja-JP') : '' }} に自動課金が開始されます。
+          それまでにキャンセルすれば請求は発生しません。
         </div>
       </div>
 
@@ -118,9 +159,15 @@ const planLabel = computed(() => {
           <li>無制限プレイ (フリーは 1 日 5 問まで)</li>
           <li>過去のデイリーチャレンジへのアクセス</li>
           <li>詳細統計とジャンル別分析</li>
-          <li>コミュニティジャンルの作成 (フリーは閲覧のみ)</li>
+          <li>コミュニティジャンルのプレイ・作成</li>
           <li>広告非表示</li>
         </ul>
+        <div v-if="subInfo?.trialEligible" class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm">
+          <div class="font-bold text-emerald-700">🎁 初回 7 日間無料</div>
+          <div class="text-xs text-emerald-700 mt-1">
+            7 日間は無料で全機能を使えます。期間中にキャンセルすれば請求は発生しません。
+          </div>
+        </div>
       </div>
 
       <div v-else class="space-y-3 pt-2">
@@ -164,12 +211,16 @@ const planLabel = computed(() => {
                 ? 'bg-gradient-to-r from-amber-500 to-rose-500'
                 : 'bg-gradient-to-r from-slate-600 to-slate-700'
             ]">
-            {{ loadingPlan === plan.id ? '読み込み中…' : 'このプランで申込' }}
+            {{ loadingPlan === plan.id ? '読み込み中…' : (subInfo?.trialEligible ? '7 日間無料で試す' : 'このプランで申込') }}
           </button>
+          <div v-if="subInfo?.trialEligible" class="text-xs text-emerald-700 text-center font-bold">
+            7 日間無料、その後 ¥{{ plan.price.toLocaleString() }} 自動課金
+          </div>
         </div>
       </div>
       <div class="text-xs text-slate-400 text-center pt-1">
-        支払いは Stripe を通じて安全に行われます。いつでもキャンセル可能。
+        支払いは Stripe を通じて安全に行われます。
+        無料期間中・期間後ともいつでもキャンセル可能。期間後の自動課金前にキャンセルすれば請求は発生しません。
       </div>
     </div>
 
