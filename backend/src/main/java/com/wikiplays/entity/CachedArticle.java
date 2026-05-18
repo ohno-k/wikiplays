@@ -19,7 +19,8 @@ import java.time.Instant;
     name = "cached_article",
     indexes = {
         @Index(name = "idx_cached_article_scope_genre", columnList = "scope,genre"),
-        @Index(name = "idx_cached_article_title", columnList = "title", unique = true)
+        @Index(name = "idx_cached_article_title", columnList = "title", unique = true),
+        @Index(name = "idx_cached_article_community", columnList = "community_genre_id")
     }
 )
 public class CachedArticle {
@@ -38,6 +39,10 @@ public class CachedArticle {
     /** ジャンル ID。null は総合 (ランダム取得)。 */
     @Column(length = 32)
     private String genre;
+
+    /** コミュニティジャンル ID。コミュニティジャンルの記事をキャッシュした場合に値あり。 */
+    @Column(name = "community_genre_id")
+    private Long communityGenreId;
 
     /** ArticleData 全体を JSON 文字列でシリアライズして保存。 */
     @Column(nullable = false, columnDefinition = "TEXT")
@@ -64,6 +69,8 @@ public class CachedArticle {
     public void setScope(String scope) { this.scope = scope; }
     public String getGenre() { return genre; }
     public void setGenre(String genre) { this.genre = genre; }
+    public Long getCommunityGenreId() { return communityGenreId; }
+    public void setCommunityGenreId(Long communityGenreId) { this.communityGenreId = communityGenreId; }
     public String getDataJson() { return dataJson; }
     public void setDataJson(String dataJson) { this.dataJson = dataJson; }
     public Integer getExtractedYear() { return extractedYear; }

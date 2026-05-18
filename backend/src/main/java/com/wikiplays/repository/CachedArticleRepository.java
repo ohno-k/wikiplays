@@ -43,4 +43,14 @@ public interface CachedArticleRepository extends JpaRepository<CachedArticle, Lo
     /** scope と genre のあらゆる組み合わせの中で総数。 */
     @Query("SELECT COUNT(c) FROM CachedArticle c")
     long countAll();
+
+    /** コミュニティジャンル指定でランダムに 1 件。 */
+    @Query(value =
+        "SELECT * FROM cached_article WHERE community_genre_id = :cid " +
+        "ORDER BY RANDOM() LIMIT 1",
+        nativeQuery = true)
+    Optional<CachedArticle> findRandomByCommunityGenreId(@Param("cid") Long communityGenreId);
+
+    /** コミュニティジャンル指定でキャッシュ件数。 */
+    long countByCommunityGenreId(Long communityGenreId);
 }

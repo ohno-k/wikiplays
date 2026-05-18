@@ -1,11 +1,15 @@
 package com.wikiplays.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wikiplays.dto.ArticleData;
 import com.wikiplays.dto.CustomGenreCreate;
 import com.wikiplays.dto.CustomGenreResponse;
+import com.wikiplays.entity.CachedArticle;
 import com.wikiplays.entity.CustomGenre;
 import com.wikiplays.entity.Subscription;
 import com.wikiplays.entity.User;
+import com.wikiplays.repository.CachedArticleRepository;
 import com.wikiplays.repository.CustomGenreRepository;
 import com.wikiplays.repository.SubscriptionRepository;
 import com.wikiplays.service.ArticleFilter;
@@ -44,17 +48,21 @@ public class CustomGenreController {
     private final WikipediaService wikipediaService;
     private final ArticleFilter filter;
     private final SubscriptionRepository subscriptionRepository;
+    private final CachedArticleRepository cachedArticleRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public CustomGenreController(
         CustomGenreRepository repository,
         WikipediaService wikipediaService,
         ArticleFilter filter,
-        SubscriptionRepository subscriptionRepository
+        SubscriptionRepository subscriptionRepository,
+        CachedArticleRepository cachedArticleRepository
     ) {
         this.repository = repository;
         this.wikipediaService = wikipediaService;
         this.filter = filter;
         this.subscriptionRepository = subscriptionRepository;
+        this.cachedArticleRepository = cachedArticleRepository;
     }
 
     /** 人気順の一覧。 */
@@ -137,7 +145,12 @@ public class CustomGenreController {
     /**
      * 指定コミュニティジャンルでランダムな記事を取得 (出題用)。
      * プレミアム会員限定。未ログインは 401、フリーは 402 を返す。
-     * カテゴリ群を順次試して、フィルタを通過した記事を返す。
+     *
+     * 1. まず DB の CachedArticle に同コミュニティジャンルの記事がキャッシュされていれば、そこから返す
+     * 2. キャッシュがなければ Wikipedia から少数取得→フィルタ通過した記事を DB にキャッシュ→返す
+     *
+     * Wikipedia 直叩きは API 遅延でリクエスト全体が長引くため、フォールバックは
+     * 1 カテゴリ×最大 8 記事に絞る (10〜15 秒以内に必ず返ることを目標)。
      */
     @GetMapping("/{id}/random")
     @Transactional
@@ -152,32 +165,82 @@ public class CustomGenreController {
         Optional<CustomGenre> opt = repository.findById(id);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         CustomGenre genre = opt.get();
-        List<String> categories = new ArrayList<>(Arrays.asList(genre.getCategoriesCsv().split("\t")));
-        Collections.shuffle(categories);
 
-        for (int attempt = 0; attempt < 10; attempt++) {
-            for (String cat : categories) {
-                try {
-                    List<String> members = wikipediaService.fetchCategoryMembers(cat, 30);
-                    if (members.isEmpty()) continue;
-                    Collections.shuffle(members);
-                    for (String title : members) {
-                        try {
-                            ArticleData data = wikipediaService.fetchArticleData(title);
-                            if (filter.isAllowed(data)) {
-                                genre.setPlayCount(genre.getPlayCount() + 1);
-                                return ResponseEntity.ok(data);
-                            }
-                        } catch (Exception e) {
-                            log.debug("fetch fail '{}': {}", title, e.getMessage());
-                        }
-                    }
-                } catch (Exception e) {
-                    log.warn("category fetch fail '{}': {}", cat, e.getMessage());
-                }
+        // (1) キャッシュから引く
+        Optional<CachedArticle> cached = cachedArticleRepository.findRandomByCommunityGenreId(id);
+        if (cached.isPresent()) {
+            CachedArticle c = cached.get();
+            c.setLastUsedAt(Instant.now());
+            try {
+                ArticleData data = objectMapper.readValue(c.getDataJson(), ArticleData.class);
+                genre.setPlayCount(genre.getPlayCount() + 1);
+                return ResponseEntity.ok(data);
+            } catch (JsonProcessingException e) {
+                log.warn("failed to deserialize cached article id={}: {}", c.getId(), e.getMessage());
+                // フォールスルー、Wikipedia から取りに行く
             }
         }
+
+        // (2) Wikipedia フォールバック (短時間で諦める)
+        List<String> categories = new ArrayList<>(Arrays.asList(genre.getCategoriesCsv().split("\t")));
+        Collections.shuffle(categories);
+        ArticleData firstFound = null;
+        int totalFetched = 0;
+        final int MAX_FETCHES = 8;
+
+        for (String cat : categories) {
+            if (totalFetched >= MAX_FETCHES && firstFound != null) break;
+            try {
+                List<String> members = wikipediaService.fetchCategoryMembers(cat, 30);
+                if (members.isEmpty()) continue;
+                Collections.shuffle(members);
+                for (String title : members) {
+                    if (totalFetched >= MAX_FETCHES) break;
+                    if (cachedArticleRepository.existsByTitle(title)) continue;
+                    totalFetched++;
+                    try {
+                        ArticleData data = wikipediaService.fetchArticleData(title);
+                        if (filter.isAllowed(data)) {
+                            // DB にキャッシュ (次回以降は即時返却できる)
+                            storeToCache(data, id);
+                            if (firstFound == null) firstFound = data;
+                            // 1 件見つかったら抜ける (残りはバックグラウンドで補充される想定)
+                            break;
+                        }
+                    } catch (Exception e) {
+                        log.debug("fetch fail '{}': {}", title, e.getMessage());
+                    }
+                }
+                if (firstFound != null) break;
+            } catch (Exception e) {
+                log.warn("category fetch fail '{}': {}", cat, e.getMessage());
+            }
+        }
+
+        if (firstFound != null) {
+            genre.setPlayCount(genre.getPlayCount() + 1);
+            return ResponseEntity.ok(firstFound);
+        }
         return ResponseEntity.status(503).build();
+    }
+
+    private void storeToCache(ArticleData data, Long communityGenreId) {
+        try {
+            if (cachedArticleRepository.existsByTitle(data.title())) return;
+            CachedArticle entity = new CachedArticle();
+            entity.setTitle(data.title());
+            entity.setCommunityGenreId(communityGenreId);
+            entity.setDataJson(objectMapper.writeValueAsString(data));
+            entity.setExtractedYear(data.extractedYear());
+            entity.setExtractedYearKind(data.extractedYearKind());
+            entity.setCreatedAt(Instant.now());
+            entity.setLastUsedAt(Instant.now());
+            cachedArticleRepository.save(entity);
+        } catch (JsonProcessingException e) {
+            log.warn("failed to serialize article '{}': {}", data.title(), e.getMessage());
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.debug("concurrent save skipped for '{}'", data.title());
+        }
     }
 
     private CustomGenreResponse toResponse(CustomGenre c, String playerId) {
