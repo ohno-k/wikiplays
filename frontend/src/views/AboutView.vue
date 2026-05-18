@@ -54,18 +54,24 @@ const CONTACT_EMAIL = 'wikiplays416@gmail.com'
     <div class="glass-card overflow-hidden">
       <div class="h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
       <div class="p-5 space-y-3">
-        <h2 class="text-xl font-bold">📮 お問い合わせ</h2>
+        <h2 class="text-xl font-bold">📮 ご意見・ご要望募集中</h2>
         <p class="text-sm text-slate-700 leading-relaxed">
-          ご意見・ご要望・バグ報告などは下記メールアドレスへお寄せください。
+          Wikiplays は遊んでくださる皆さまの声でより良くなります。<br />
+          <strong class="text-blue-700">「こんなジャンルが欲しい」「この機能が不便」「こういうモードはどう?」</strong>
+          といったご意見・ご要望を歓迎します。バグ報告も大歓迎です。
+        </p>
+        <p class="text-sm text-slate-700 leading-relaxed">
+          下記メールアドレスまでお気軽にお寄せください。すべて開発者本人が拝見します。
         </p>
         <a
           :href="`mailto:${CONTACT_EMAIL}`"
           class="block w-full sm:w-auto sm:inline-block text-center px-5 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-bold shadow-md hover:shadow-lg transition">
           ✉ {{ CONTACT_EMAIL }}
         </a>
-        <ul class="text-sm text-slate-600 space-y-1 list-disc list-inside pt-2">
+        <div class="text-xs font-bold text-slate-500 pt-3">▼ よくお寄せいただく内容</div>
+        <ul class="text-sm text-slate-600 space-y-1 list-disc list-inside">
+          <li><strong>機能要望 / 改善提案</strong> — 新ジャンル・新モード・UI 改善など</li>
           <li>バグ報告 / 動作不良</li>
-          <li>機能要望 / 改善提案</li>
           <li><strong class="text-red-600">不適切な記事の通報</strong> (出題されるべきでない記事)</li>
           <li>サブスクリプション・お支払いに関するお問い合わせ</li>
           <li>その他のご質問</li>
