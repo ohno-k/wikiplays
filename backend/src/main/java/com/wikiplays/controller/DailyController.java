@@ -41,20 +41,34 @@ public class DailyController {
         this.subscriptionRepo = subscriptionRepo;
     }
 
-    /** 今日のチャレンジを取得 (なければ生成)。 */
+    /** 今日のチャレンジを取得 (なければ生成)。登録ユーザー限定。 */
     @GetMapping("/today")
     public ResponseEntity<DailyChallengeResponse> today(
         @RequestParam(value = "scope", required = false) String scope,
-        @RequestParam(value = "genre", required = false) String genre
+        @RequestParam(value = "genre", required = false) String genre,
+        Authentication auth
     ) {
+        if (auth == null || !(auth.getPrincipal() instanceof User)) {
+            return ResponseEntity.status(401).build();
+        }
         Optional<DailyChallengeResponse> resp = service.getToday(scope, genre);
         return resp.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.status(503).build());
     }
 
-    /** スコア提出。 */
+    /** スコア提出。登録ユーザー限定 (1 日 1 回、user.id ベースで重複防止)。 */
     @PostMapping("/submit")
-    public ResponseEntity<Void> submit(@RequestBody DailyScoreSubmit req) {
-        boolean ok = service.submit(req);
+    public ResponseEntity<Void> submit(@RequestBody DailyScoreSubmit req, Authentication auth) {
+        if (auth == null || !(auth.getPrincipal() instanceof User user)) {
+            return ResponseEntity.status(401).build();
+        }
+        // クライアントの playerId / displayName は使わず、ログインユーザー情報で上書きする
+        DailyScoreSubmit normalized = new DailyScoreSubmit(
+            req.dailyChallengeId(),
+            "u" + user.getId(),
+            user.getDisplayName(),
+            req.score()
+        );
+        boolean ok = service.submit(normalized);
         return ok ? ResponseEntity.ok().build() : ResponseEntity.badRequest().build();
     }
 

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { MODES } from '../types'
 import AdSlot from '../components/AdSlot.vue'
+import { useAuth } from '../composables/useAuth'
+
+const { isLoggedIn } = useAuth()
 </script>
 
 <template>
@@ -29,7 +32,12 @@ import AdSlot from '../components/AdSlot.vue'
         <div class="relative flex items-center gap-3">
           <div class="text-3xl">⭐</div>
           <div class="flex-1">
-            <div class="text-xs font-mono text-amber-600 font-bold">DAILY</div>
+            <div class="text-xs font-mono text-amber-600 font-bold flex items-center gap-1">
+              DAILY
+              <span v-if="!isLoggedIn" class="ml-1 px-1.5 py-0.5 bg-slate-700 text-white rounded-full text-[10px] font-bold">
+                🔒 要ログイン
+              </span>
+            </div>
             <div class="text-base font-bold">今日の 5 問チャレンジ</div>
             <div class="text-xs text-slate-600 mt-0.5">全プレイヤー共通の問題</div>
           </div>

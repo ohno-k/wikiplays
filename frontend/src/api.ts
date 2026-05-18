@@ -45,25 +45,28 @@ export interface DailyLeaderboardEntry {
   rank: number
 }
 
-export async function fetchDailyChallenge(genre?: Genre | null, scope?: Scope | null): Promise<DailyChallengeResponse> {
+export async function fetchDailyChallenge(genre?: Genre | null, scope?: Scope | null, token?: string | null): Promise<DailyChallengeResponse> {
   const params = new URLSearchParams()
   if (genre) params.set('genre', genre)
   if (scope) params.set('scope', scope)
   const url = params.toString() ? `/api/daily/today?${params.toString()}` : '/api/daily/today'
-  const res = await fetch(url)
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(url, { headers })
+  if (res.status === 401) throw new Error('デイリーチャレンジはログインが必要です')
   if (!res.ok) throw new Error(`デイリーチャレンジ取得失敗 (HTTP ${res.status})`)
   return res.json()
 }
 
 export async function submitDailyScore(payload: {
   dailyChallengeId: number
-  playerId: string
-  displayName: string
   score: number
-}): Promise<boolean> {
+}, token?: string | null): Promise<boolean> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
   const res = await fetch('/api/daily/submit', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   })
   return res.ok

@@ -6,9 +6,6 @@ import {
   fetchDailyChallenge,
   submitDailyScore,
   fetchDailyLeaderboard,
-  getPlayerId,
-  getDisplayName,
-  setDisplayName,
   recordPlay,
   type DailyChallengeResponse,
   type DailyLeaderboardEntry,
@@ -16,6 +13,9 @@ import {
 import { maskTitle, splitParagraphs } from '../masking'
 import { isCorrect, scoreEmoji } from '../scoring'
 import ResultShareCard from '../components/ResultShareCard.vue'
+import { useAuth } from '../composables/useAuth'
+
+const { isLoggedIn, user, token } = useAuth()
 
 // ===== ジャンル選択 =====
 const selectedGenre = ref<Genre | null>(null)
@@ -26,7 +26,6 @@ const challenge = ref<DailyChallengeResponse | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const leaderboard = ref<DailyLeaderboardEntry[]>([])
-const displayName = ref(getDisplayName())
 const submitted = ref(false)
 
 const TOTAL_QUESTIONS = 5
@@ -143,7 +142,7 @@ async function startChallenge() {
   currentQ.value = 0
   submitted.value = false
   try {
-    challenge.value = await fetchDailyChallenge(selectedGenre.value, selectedScope.value)
+    challenge.value = await fetchDailyChallenge(selectedGenre.value, selectedScope.value, token.value)
     if (challenge.value.articles.length < TOTAL_QUESTIONS) {
       error.value = '今日の問題がまだ準備中です。少し待ってからもう一度試してください。'
       view.value = 'pick'
@@ -200,13 +199,10 @@ function nextQuestion() {
 
 async function submitToServer() {
   if (!challenge.value || submitted.value) return
-  if (displayName.value) setDisplayName(displayName.value)
   await submitDailyScore({
     dailyChallengeId: challenge.value.id,
-    playerId: getPlayerId(),
-    displayName: displayName.value || '名無し',
     score: totalScore.value,
-  })
+  }, token.value)
   // LocalStorage に履歴記録
   recordPlay({
     mode: 'daily',
@@ -260,8 +256,28 @@ void isCorrect
       </p>
     </div>
 
-    <!-- ジャンル選択 -->
-    <div v-if="view === 'pick'" class="space-y-4">
+    <!-- 未ログイン: ログイン誘導 -->
+    <div v-if="!isLoggedIn" class="glass-card p-6 text-center space-y-4">
+      <div class="text-5xl">🔒</div>
+      <div class="text-lg font-bold">デイリーチャレンジはアカウント登録が必要です</div>
+      <p class="text-sm text-slate-600 leading-relaxed">
+        全プレイヤー共通の問題のため、SNS 等での回答共有を防ぐ目的でログインを必須にしています。<br />
+        無料登録で今日のチャレンジに参加できます。
+      </p>
+      <div class="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+        <router-link to="/login"
+          class="px-5 py-2 bg-gradient-to-r from-amber-500 to-rose-500 text-white rounded-lg font-bold shadow-md hover:shadow-lg transition">
+          ログイン
+        </router-link>
+        <router-link to="/register"
+          class="px-5 py-2 bg-white border border-amber-400 text-amber-700 rounded-lg font-bold hover:bg-amber-50 transition">
+          無料で新規登録
+        </router-link>
+      </div>
+    </div>
+
+    <!-- ジャンル選択 (ログイン済のみ) -->
+    <div v-else-if="view === 'pick'" class="space-y-4">
       <div class="text-sm font-bold">ジャンルを選んでください</div>
 
       <!-- スコープ -->
@@ -371,9 +387,9 @@ void isCorrect
       </div>
 
       <div v-if="!submitted" class="glass-card p-4 space-y-2">
-        <label class="text-xs font-bold text-slate-600">ランキングに載せる名前 (任意)</label>
-        <input v-model="displayName" type="text" maxlength="32" placeholder="名無し"
-          class="w-full border border-slate-300 rounded px-3 py-2 text-sm" />
+        <div class="text-xs text-slate-600">
+          ランキング表示名: <span class="font-bold">{{ user?.displayName ?? '' }}</span>
+        </div>
         <button @click="submitToServer" class="w-full px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700">
           スコアを記録
         </button>
