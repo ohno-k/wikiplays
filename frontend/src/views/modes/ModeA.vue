@@ -136,7 +136,14 @@ function generateOptions(target: string, fullExtract: string): string[] {
 
 /** タイトルから入力対象の文字配列を作る。「タイトル (曖昧さ回避)」の括弧前部分のみ。 */
 function getAnswerChars(title: string): string[] {
-  const main = title.split(/[（(]/)[0].trim()
+  if (!title) return []
+  let main = title.split(/[（(]/)[0].trim()
+  // 「(94) オーロラ」のように括弧で始まるタイトルは最初の split が空になるので、
+  // 括弧書きを丸ごと取り除いた残りを使う
+  if (!main) {
+    main = title.replace(/[（(][^（()）]*[）)]/g, '').trim()
+  }
+  if (!main) main = title.trim()
   return Array.from(main)
 }
 

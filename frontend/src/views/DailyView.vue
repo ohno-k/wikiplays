@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import type { ArticleData, Genre, Scope } from '../types'
-import { GENRES, SCOPE_LABELS } from '../types'
+import type { ArticleData } from '../types'
 import {
   fetchDailyChallenge,
   submitDailyScore,
@@ -17,9 +16,7 @@ import { useAuth } from '../composables/useAuth'
 
 const { isLoggedIn, user, token } = useAuth()
 
-// ===== ジャンル選択 =====
-const selectedGenre = ref<Genre | null>(null)
-const selectedScope = ref<Scope>('jp')
+// デイリーは全プレイヤー共通の「総合」のみ (ジャンル/スコープ選択なし)
 const view = ref<'pick' | 'play' | 'result'>('pick')
 
 const challenge = ref<DailyChallengeResponse | null>(null)
@@ -60,12 +57,7 @@ const visibleParagraphs = computed(() => {
 const hasMore = computed(() => revealed.value < paragraphs.value.length)
 const currentChoices = computed(() => charOptions.value[currentPos.value] ?? [])
 
-const genreMeta = computed(() =>
-  challenge.value?.genre ? GENRES.find(g => g.id === challenge.value!.genre) : null
-)
-const scopeMeta = computed(() =>
-  challenge.value?.scope ? SCOPE_LABELS[challenge.value.scope] : null
-)
+// デイリーは総合 (genre=null, scope=null) 固定なのでメタ情報も不要
 
 function clearTimers() {
   if (autoTimer.value !== null) { clearTimeout(autoTimer.value); autoTimer.value = null }
@@ -109,7 +101,15 @@ function generateOptions(target: string, fullExtract: string): string[] {
   return shuffle([target, ...dummies])
 }
 function getAnswerChars(title: string): string[] {
-  const main = title.split(/[（(]/)[0].trim()
+  if (!title) return []
+  // 通常: タイトル本体 (曖昧さ回避括弧の前) を取る
+  let main = title.split(/[（(]/)[0].trim()
+  // 「(94) オーロラ」のように括弧から始まる場合は最初の split が空になるので、
+  // 括弧書きを丸ごと取り除いた残りを使う
+  if (!main) {
+    main = title.replace(/[（(][^（()）]*[）)]/g, '').trim()
+  }
+  if (!main) main = title.trim()
   return Array.from(main)
 }
 function advanceSkippable() {
@@ -142,7 +142,7 @@ async function startChallenge() {
   currentQ.value = 0
   submitted.value = false
   try {
-    challenge.value = await fetchDailyChallenge(selectedGenre.value, selectedScope.value, token.value)
+    challenge.value = await fetchDailyChallenge(null, null, token.value)
     if (challenge.value.articles.length < TOTAL_QUESTIONS) {
       error.value = '今日の問題がまだ準備中です。少し待ってからもう一度試してください。'
       view.value = 'pick'
@@ -227,9 +227,7 @@ async function loadLeaderboard() {
 const shareText = computed(() => {
   if (!challenge.value) return ''
   const emojis = qResults.value.map(r => scoreEmoji(r.score, 1000)).join('')
-  const scopeLabel = scopeMeta.value ? `${scopeMeta.value.emoji}${scopeMeta.value.name}` : ''
-  const genreLabel = genreMeta.value ? `${genreMeta.value.emoji}${genreMeta.value.name}` : '総合'
-  return `Wikiplays デイリー ${challenge.value.date} ${scopeLabel}${genreLabel}\n${totalScore.value}/${1000 * TOTAL_QUESTIONS}\n${emojis}\nhttps://wikiplays.me/daily`
+  return `Wikiplays デイリー ${challenge.value.date} 🎲総合\n${totalScore.value}/${1000 * TOTAL_QUESTIONS}\n${emojis}\nhttps://wikiplays.me/daily`
 })
 
 function isCorrectFinal(): boolean {
@@ -276,46 +274,18 @@ void isCorrect
       </div>
     </div>
 
-    <!-- ジャンル選択 (ログイン済のみ) -->
+    <!-- 開始画面 (ログイン済のみ) -->
     <div v-else-if="view === 'pick'" class="space-y-4">
-      <div class="text-sm font-bold">ジャンルを選んでください</div>
-
-      <!-- スコープ -->
-      <div class="flex justify-center gap-2">
-        <button v-for="(meta, key) in SCOPE_LABELS" :key="key"
-          @click="selectedScope = (key as Scope)"
-          :class="[
-            'px-4 py-2 rounded-full text-sm font-bold transition flex items-center gap-2',
-            selectedScope === key
-              ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-md'
-              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50',
-          ]">
-          <span>{{ meta.emoji }}</span><span>{{ meta.name }}</span>
-        </button>
-      </div>
-
-      <!-- 総合 -->
-      <button @click="selectedGenre = null; startChallenge()"
-        class="w-full glass-card glass-card-hover p-4 flex items-center gap-3 text-left">
-        <div class="text-3xl">🎲</div>
+      <button @click="startChallenge"
+        class="w-full glass-card glass-card-hover p-6 flex items-center gap-4 text-left">
+        <div class="text-5xl">🎲</div>
         <div class="flex-1">
-          <div class="font-bold">総合 (おまかせ)</div>
-          <div class="text-xs text-slate-500">全 Wikipedia から 5 問</div>
+          <div class="text-xs font-mono text-amber-600 font-bold">START</div>
+          <div class="text-lg font-bold">今日のチャレンジを始める</div>
+          <div class="text-xs text-slate-500 mt-0.5">全 Wikipedia から 5 問 / 全プレイヤー共通の問題</div>
         </div>
-        <div class="text-slate-400">→</div>
+        <div class="text-slate-400 text-2xl">→</div>
       </button>
-
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <button v-for="g in GENRES" :key="g.id"
-          @click="selectedGenre = g.id; startChallenge()"
-          class="glass-card glass-card-hover p-3 text-left flex items-center gap-2">
-          <span class="text-2xl">{{ g.emoji }}</span>
-          <div>
-            <div class="font-bold text-sm">{{ g.name }}</div>
-            <div class="text-xs text-slate-500">{{ SCOPE_LABELS[selectedScope].emoji }} {{ SCOPE_LABELS[selectedScope].name }}</div>
-          </div>
-        </button>
-      </div>
 
       <div v-if="error" class="text-red-600 text-sm">{{ error }}</div>
     </div>
@@ -397,7 +367,7 @@ void isCorrect
 
       <ResultShareCard
         :title="`デイリーチャレンジ ${challenge?.date ?? ''}`"
-        :subtitle="genreMeta ? `${scopeMeta?.emoji ?? ''} ${genreMeta.emoji} ${genreMeta.name}` : '🎲 総合'"
+        subtitle="🎲 総合"
         :total-score="totalScore"
         :max-score="1000 * TOTAL_QUESTIONS"
         :results="qResults"

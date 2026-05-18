@@ -9,6 +9,39 @@ function escapeRegex(s: string): string {
 }
 
 /**
+ * タイトルの各文字間に「最大 1 個の空白 (半角/全角)」を許容する正規表現を作る。
+ * Wikipedia は日本人名で「相原 信行」のように姓と名の間に半角スペースを入れる
+ * 慣習があるため、タイトル「相原信行」のままだと本文側でマッチしないことへの対策。
+ */
+function buildTolerantTitleRegex(title: string): RegExp {
+  const chars = Array.from(title)
+  if (chars.length === 0) return /(?!)/g
+  const pattern = chars.map(escapeRegex).join('[ 　]?')
+  return new RegExp(pattern, 'g')
+}
+
+/**
+ * 本文中で「タイトルの前半 + 空白 + タイトルの後半」の形が見つかれば、
+ * タイトルを人名 (姓・名) と判定し、その分割位置を返す。
+ * 例: title="相原信行", text 内に「相原 信行」があれば ["相原", "信行"] を返す。
+ */
+function detectPersonNameParts(text: string, title: string): string[] | null {
+  const chars = Array.from(title)
+  if (chars.length < 3) return null
+  for (let i = 1; i < chars.length; i++) {
+    const left = chars.slice(0, i).join('')
+    const right = chars.slice(i).join('')
+    // 姓・名はそれぞれ 1 文字以上、片方が 1 文字だけの場合は誤検出リスクが高いので除外
+    if (left.length < 2 || right.length < 2) continue
+    const pattern = escapeRegex(left) + '[ 　]+' + escapeRegex(right)
+    if (new RegExp(pattern).test(text)) {
+      return [left, right]
+    }
+  }
+  return null
+}
+
+/**
  * 記事タイトルおよび関連する手がかり (読み仮名・別名・英字名) を全てマスクする。
  *
  * Wikipedia の冒頭は典型的に
@@ -19,27 +52,35 @@ function escapeRegex(s: string): string {
 export function maskTitle(text: string, title: string): string {
   if (!text || !title) return text
 
-  // 1. タイトル本体
-  let out = text.replace(new RegExp(escapeRegex(title), 'g'), MASK_TOKEN)
+  // 1. タイトル本体 (文字間の任意空白を許容)
+  //    例: title="相原信行" でも本文「相原 信行」にマッチする
+  let out = text.replace(buildTolerantTitleRegex(title), MASK_TOKEN)
 
-  // 2. 「タイトル (曖昧さ回避)」の括弧前部分
-  const paren = title.split(/[（(]/)[0].trim()
-  if (paren && paren !== title) {
-    out = out.replace(new RegExp(escapeRegex(paren), 'g'), MASK_TOKEN)
+  // 2. 人名分割: 本文中で「○○ ○○」と空白挟みで現れていたら姓と名を個別マスク
+  //    "相原" 単独出現 (相原体操クラブ等) や "信行" 単独出現も伏せる
+  const parts = detectPersonNameParts(text, title)
+  if (parts) {
+    for (const p of parts) {
+      out = out.replace(new RegExp(escapeRegex(p), 'g'), MASK_TOKEN)
+    }
   }
 
-  // 3. マスクトークン直後の括弧書きを丸ごと消す
+  // 3. 「タイトル (曖昧さ回避)」の括弧前部分
+  const paren = title.split(/[（(]/)[0].trim()
+  if (paren && paren !== title && paren.length >= 2) {
+    out = out.replace(buildTolerantTitleRegex(paren), MASK_TOKEN)
+  }
+
+  // 4. マスクトークン直後の括弧書きを丸ごと消す
   //    例: 「■■■■」（はるのゆめ、英: ...） → 「■■■■」
   //    例: ■■■■（よみがな） → ■■■■
+  //    マスクが連続している場合 (■■■■ ■■■■) もまとめて 1 括弧扱いにする
   const esc = escapeRegex(MASK_TOKEN)
-  // 引用記号 + マスク + 引用記号 + 括弧書き
   out = out.replace(
-    new RegExp(`([「『]?)${esc}([」』]?)\\s*[（(][^（()）]{0,80}[）)]`, 'g'),
+    new RegExp(`([「『]?)(?:${esc}[ 　]?)+([」』]?)\\s*[（(][^（()）]{0,80}[）)]`, 'g'),
     `$1${MASK_TOKEN}$2`
   )
 
-  // 4. マスクトークンの直前にある記号付き別名 (英字括弧書きや別名追記) も消す
-  //    例: ■■■■, ■■■■（英: Title） は (3) で対応済み
   return out
 }
 

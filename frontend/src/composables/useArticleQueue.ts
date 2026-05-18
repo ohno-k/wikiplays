@@ -32,19 +32,31 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
   const cache = ref<T | null>(null) as { value: T | null }
   const prefetching = ref(false)
   const maxAttempts = options.maxAttempts ?? 20
+  // セッション内で出題済みのタイトルを記録し、連続して同じ問題が出ないようにする。
+  // プールに記事が少ない (ジャンル×scope バケットに数件) ときの重複出題対策。
+  const seenTitles = new Set<string>()
 
   async function findOne(): Promise<T> {
     let attempts = 0
     let lastFetchError: unknown = null
     let prepareRejects = 0
+    let duplicateSkips = 0
     while (attempts < maxAttempts) {
       try {
         const communityId = options.communityGenreId?.value
         const a = communityId != null
           ? await fetchCommunityRandomArticle(communityId)
           : await fetchRandomArticle(options.genre?.value, options.scope?.value)
+        // 既出記事は最大 maxAttempts/2 回までスキップ。
+        // それを超えても重複が続くならプールが枯渇しているので諦めて出す。
+        if (seenTitles.has(a.title) && duplicateSkips < Math.floor(maxAttempts / 2)) {
+          duplicateSkips++
+          attempts++
+          continue
+        }
         const prepared = await options.prepare(a)
         if (prepared !== null && prepared !== undefined) {
+          seenTitles.add(a.title)
           return prepared
         }
         prepareRejects++
@@ -86,6 +98,7 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
 
   function reset() {
     cache.value = null
+    seenTitles.clear()
   }
 
   return { pull, prefetch, reset, prefetching }
