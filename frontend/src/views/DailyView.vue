@@ -6,6 +6,7 @@ import {
   submitDailyScore,
   fetchDailyLeaderboard,
   recordPlay,
+  submitPlayRecord,
   type DailyChallengeResponse,
   type DailyLeaderboardEntry,
 } from '../api'
@@ -241,6 +242,14 @@ async function submitToServer() {
     score: totalScore.value,
     maxScore: 1000 * TOTAL_QUESTIONS,
   })
+  // サーバー側 play_record にも記録 (全体ランキング /api/leaderboard 集計用)
+  submitPlayRecord({
+    mode: 'daily',
+    genre: challenge.value.genre,
+    scope: challenge.value.scope,
+    score: totalScore.value,
+    maxScore: 1000 * TOTAL_QUESTIONS,
+  }, token.value).catch(() => {})
   submitted.value = true
   loadLeaderboard()
 }
