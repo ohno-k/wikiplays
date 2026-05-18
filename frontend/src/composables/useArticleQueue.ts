@@ -35,6 +35,8 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
 
   async function findOne(): Promise<T> {
     let attempts = 0
+    let lastFetchError: unknown = null
+    let prepareRejects = 0
     while (attempts < maxAttempts) {
       try {
         const communityId = options.communityGenreId?.value
@@ -45,10 +47,15 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
         if (prepared !== null && prepared !== undefined) {
           return prepared
         }
-      } catch {
-        // fetch 失敗は無視して次へ
+        prepareRejects++
+      } catch (e) {
+        lastFetchError = e
+        console.warn('[useArticleQueue] fetch failed:', e)
       }
       attempts++
+    }
+    if (lastFetchError && prepareRejects === 0) {
+      throw new Error(`サーバー接続に失敗しました: ${(lastFetchError as Error).message ?? lastFetchError}`)
     }
     throw new Error('適切な記事が見つかりませんでした')
   }
