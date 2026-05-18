@@ -48,10 +48,11 @@ public class DailyController {
         @RequestParam(value = "genre", required = false) String genre,
         Authentication auth
     ) {
-        if (auth == null || !(auth.getPrincipal() instanceof User)) {
+        if (auth == null || !(auth.getPrincipal() instanceof User user)) {
             return ResponseEntity.status(401).build();
         }
-        Optional<DailyChallengeResponse> resp = service.getToday(scope, genre);
+        String playerId = "u" + user.getId();
+        Optional<DailyChallengeResponse> resp = service.getToday(scope, genre, playerId);
         return resp.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.status(503).build());
     }
 

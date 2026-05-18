@@ -46,9 +46,10 @@ public class DailyChallengeService {
         this.articlePool = articlePool;
     }
 
-    /** 今日のデイリーチャレンジを取得 (なければ作成)。 */
+    /** 今日のデイリーチャレンジを取得 (なければ作成)。
+     *  playerId が指定されていれば、その人の今日のスコア (既プレイなら) を myScore に含める。 */
     @Transactional
-    public Optional<DailyChallengeResponse> getToday(String scope, String genre) {
+    public Optional<DailyChallengeResponse> getToday(String scope, String genre, String playerId) {
         LocalDate today = LocalDate.now(TZ);
         String scopeKey = nullToEmpty(normalize(scope));
         String genreKey = nullToEmpty(normalize(genre));
@@ -58,7 +59,7 @@ public class DailyChallengeService {
             .orElseGet(() -> generateNew(today, scopeKey, genreKey));
 
         if (challenge == null) return Optional.empty();
-        return Optional.of(toResponse(challenge));
+        return Optional.of(toResponse(challenge, playerId));
     }
 
     private DailyChallenge generateNew(LocalDate date, String scopeKey, String genreKey) {
@@ -91,7 +92,7 @@ public class DailyChallengeService {
         }
     }
 
-    private DailyChallengeResponse toResponse(DailyChallenge challenge) {
+    private DailyChallengeResponse toResponse(DailyChallenge challenge, String playerId) {
         List<String> titles = splitCsv(challenge.getArticleTitlesCsv());
         List<ArticleData> articles = new ArrayList<>();
         for (String t : titles) {
@@ -101,6 +102,13 @@ public class DailyChallengeService {
         int top = scoreRepo
             .findByDailyChallengeIdOrderByScoreDescPlayedAtAsc(challenge.getId(), PageRequest.of(0, 1))
             .stream().mapToInt(DailyScore::getScore).max().orElse(0);
+        Integer myScore = null;
+        if (playerId != null && !playerId.isBlank()) {
+            myScore = scoreRepo
+                .findFirstByDailyChallengeIdAndPlayerId(challenge.getId(), playerId)
+                .map(DailyScore::getScore)
+                .orElse(null);
+        }
         return new DailyChallengeResponse(
             challenge.getId(),
             challenge.getDate(),
@@ -108,7 +116,8 @@ public class DailyChallengeService {
             challenge.getGenreKey().isEmpty() ? null : challenge.getGenreKey(),
             articles,
             playerCount,
-            top
+            top,
+            myScore
         );
     }
 

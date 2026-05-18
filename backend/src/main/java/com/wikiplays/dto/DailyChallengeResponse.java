@@ -10,5 +10,7 @@ public record DailyChallengeResponse(
     String genre,
     List<ArticleData> articles,
     long playerCount,
-    int topScore
+    int topScore,
+    /** 認証ユーザーが今日のチャレンジを既プレイ済みならその点数、未プレイなら null。 */
+    Integer myScore
 ) {}

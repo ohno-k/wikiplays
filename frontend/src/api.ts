@@ -36,6 +36,8 @@ export interface DailyChallengeResponse {
   articles: ArticleData[]
   playerCount: number
   topScore: number
+  /** 認証ユーザーが今日のチャレンジを既プレイ済みならその点数、未プレイなら null。 */
+  myScore: number | null
 }
 
 export interface DailyLeaderboardEntry {

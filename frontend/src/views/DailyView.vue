@@ -14,7 +14,7 @@ import { isCorrect, scoreEmoji } from '../scoring'
 import ResultShareCard from '../components/ResultShareCard.vue'
 import { useAuth } from '../composables/useAuth'
 
-const { isLoggedIn, user, token } = useAuth()
+const { isLoggedIn, token } = useAuth()
 
 // デイリーは全プレイヤー共通の「総合」のみ (ジャンル/スコープ選択なし)
 const view = ref<'pick' | 'play' | 'result'>('pick')
@@ -134,7 +134,32 @@ function setupArticle(a: ArticleData) {
   scheduleNextReveal()
 }
 
+/** 入場時に今日の challenge を取得し、既プレイ判定を行う。 */
+async function loadChallenge() {
+  if (!isLoggedIn.value) return
+  loading.value = true
+  error.value = null
+  try {
+    challenge.value = await fetchDailyChallenge(null, null, token.value)
+    if (challenge.value.myScore != null) {
+      // 既に今日のスコアあり → 開始ボタンを出さず、結果画面 (リーダーボード) に直接遷移
+      submitted.value = true
+      view.value = 'result'
+      loadLeaderboard()
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '読み込み失敗'
+  } finally {
+    loading.value = false
+  }
+}
+
 async function startChallenge() {
+  if (!challenge.value) {
+    await loadChallenge()
+  }
+  const c = challenge.value
+  if (!c || c.myScore != null) return  // 未取得 or 既プレイなら開始しない
   loading.value = true
   error.value = null
   view.value = 'play'
@@ -142,13 +167,12 @@ async function startChallenge() {
   currentQ.value = 0
   submitted.value = false
   try {
-    challenge.value = await fetchDailyChallenge(null, null, token.value)
-    if (challenge.value.articles.length < TOTAL_QUESTIONS) {
+    if (c.articles.length < TOTAL_QUESTIONS) {
       error.value = '今日の問題がまだ準備中です。少し待ってからもう一度試してください。'
       view.value = 'pick'
       return
     }
-    setupArticle(challenge.value.articles[0])
+    setupArticle(c.articles[0])
   } catch (e) {
     error.value = e instanceof Error ? e.message : '読み込み失敗'
     view.value = 'pick'
@@ -199,10 +223,16 @@ function nextQuestion() {
 
 async function submitToServer() {
   if (!challenge.value || submitted.value) return
-  await submitDailyScore({
+  const ok = await submitDailyScore({
     dailyChallengeId: challenge.value.id,
     score: totalScore.value,
   }, token.value)
+  if (!ok) {
+    error.value = 'スコアの記録に失敗しました (既に今日プレイ済みの可能性があります)。'
+    submitted.value = true  // 連打防止
+    loadLeaderboard()
+    return
+  }
   // LocalStorage に履歴記録
   recordPlay({
     mode: 'daily',
@@ -235,7 +265,10 @@ function isCorrectFinal(): boolean {
   return correctFlag.value
 }
 
-onMounted(() => { /* no auto start */ })
+onMounted(() => {
+  // 入場時に今日のチャレンジ情報を取得 (既プレイなら結果画面に遷移)
+  loadChallenge()
+})
 onUnmounted(clearTimers)
 // 'isCorrect' import を使うため (1問完答判定の保険)
 void isCorrect
@@ -274,10 +307,12 @@ void isCorrect
       </div>
     </div>
 
-    <!-- 開始画面 (ログイン済のみ) -->
+    <!-- 開始画面 (ログイン済のみ・未プレイのみ) -->
     <div v-else-if="view === 'pick'" class="space-y-4">
-      <button @click="startChallenge"
-        class="w-full glass-card glass-card-hover p-6 flex items-center gap-4 text-left">
+      <div v-if="loading" class="text-center text-slate-500 py-6">読み込み中…</div>
+      <button v-else @click="startChallenge"
+        :disabled="challenge?.myScore != null"
+        class="w-full glass-card glass-card-hover p-6 flex items-center gap-4 text-left disabled:opacity-50 disabled:cursor-not-allowed">
         <div class="text-5xl">🎲</div>
         <div class="flex-1">
           <div class="text-xs font-mono text-amber-600 font-bold">START</div>
@@ -350,22 +385,19 @@ void isCorrect
 
     <!-- 結果画面 -->
     <div v-else-if="view === 'result'" class="space-y-4">
-      <div class="glass-card p-5 text-center">
-        <div class="text-sm text-slate-500">あなたのスコア</div>
-        <div class="text-5xl font-bold brand-text mt-2">{{ totalScore }}</div>
-        <div class="text-xs text-slate-400">/ {{ 1000 * TOTAL_QUESTIONS }}</div>
-      </div>
+      <div v-if="error" class="glass-card p-3 text-sm text-red-700">{{ error }}</div>
 
-      <div v-if="!submitted" class="glass-card p-4 space-y-2">
-        <div class="text-xs text-slate-600">
-          ランキング表示名: <span class="font-bold">{{ user?.displayName ?? '' }}</span>
+      <div class="glass-card p-5 text-center">
+        <div class="text-sm text-slate-500">{{ challenge?.myScore != null ? '今日のあなたのスコア' : 'あなたのスコア' }}</div>
+        <div class="text-5xl font-bold brand-text mt-2">{{ challenge?.myScore ?? totalScore }}</div>
+        <div class="text-xs text-slate-400">/ {{ 1000 * TOTAL_QUESTIONS }}</div>
+        <div v-if="challenge?.myScore != null" class="text-xs text-slate-500 mt-2">
+          ⏰ デイリーチャレンジは 1 日 1 回。明日また挑戦できます。
         </div>
-        <button @click="submitToServer" class="w-full px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700">
-          スコアを記録
-        </button>
       </div>
 
       <ResultShareCard
+        v-if="qResults.length > 0"
         :title="`デイリーチャレンジ ${challenge?.date ?? ''}`"
         subtitle="🎲 総合"
         :total-score="totalScore"
