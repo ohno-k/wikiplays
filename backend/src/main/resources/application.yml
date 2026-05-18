@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: wikiplays-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/wikiplays}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+server:
+  port: 8080
+
+wikiplays:
+  jwt:
+    secret: ${JWT_SECRET:please-change-this-very-long-jwt-secret-for-production-only}
+    expiration-ms: 2592000000  # 30 日
+  stripe:
+    secret-key: ${STRIPE_SECRET_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    price-id-premium: ${STRIPE_PRICE_ID_PREMIUM:}
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}

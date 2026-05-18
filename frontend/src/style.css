@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #app {
+    height: 100%;
+  }
+
+  body {
+    @apply font-display antialiased text-slate-800;
+    background:
+      radial-gradient(1100px 600px at 0% -10%, rgba(99, 102, 241, 0.10), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(236, 72, 153, 0.07), transparent 60%),
+      radial-gradient(800px 600px at 50% 110%, rgba(16, 185, 129, 0.08), transparent 60%),
+      #f8fafc;
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-sm border border-slate-200/70 rounded-xl shadow-card;
+  }
+
+  .glass-card-hover {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover;
+  }
+
+  .brand-gradient {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  }
+
+  .brand-text {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  .number-display {
+    @apply font-mono font-bold tabular-nums tracking-tight;
+  }
+
+  /* モード別のテーマ色 (data-theme で切替) */
+  [data-theme="blue"]    { --theme-color: 59 130 246; }
+  [data-theme="purple"]  { --theme-color: 139 92 246; }
+  [data-theme="emerald"] { --theme-color: 16 185 129; }
+  [data-theme="amber"]   { --theme-color: 245 158 11; }
+  [data-theme="rose"]    { --theme-color: 244 63 94; }
+
+  .theme-bar {
+    background: linear-gradient(90deg,
+      rgb(var(--theme-color) / 1) 0%,
+      rgb(var(--theme-color) / 0.5) 100%);
+  }
+
+  .theme-text {
+    color: rgb(var(--theme-color) / 1);
+  }
+
+  .theme-bg-soft {
+    background: rgb(var(--theme-color) / 0.08);
+  }
+
+  .theme-border {
+    border-color: rgb(var(--theme-color) / 0.3);
+  }
+}
+
+/* スクロールバーの装飾 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.25);
+}
