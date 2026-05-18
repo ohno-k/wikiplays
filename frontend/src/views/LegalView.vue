@@ -3,7 +3,7 @@ const CONTACT_EMAIL = 'wikiplays416@gmail.com'
 const SITE_NAME = 'Wikiplays'
 const SITE_URL = 'https://wikiplays.me'
 // 運営責任者の本名はここに記載 (公開必須項目)
-const OPERATOR_NAME = '【運営者氏名をここに記入】'
+const OPERATOR_NAME = '大野 虹輝'
 </script>
 
 <template>
