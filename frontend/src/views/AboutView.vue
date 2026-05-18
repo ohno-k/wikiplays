@@ -128,6 +128,11 @@ const CONTACT_EMAIL = 'wikiplays416@gmail.com'
         <li>キャンセル: アカウントページの「支払い・解約の管理」からいつでも可能。期間途中で解約しても、現在の期間終了までは引き続きご利用いただけます (日割り返金なし)</li>
         <li>再登録時: 2 回目以降のプレミアム加入は無料期間なしで即時課金になります</li>
       </ul>
+      <p class="text-xs text-slate-500 pt-2">
+        詳細な販売条件は
+        <router-link to="/legal" class="text-blue-600 hover:underline">特定商取引法に基づく表記</router-link>
+        をご確認ください。
+      </p>
     </div>
 
     <!-- 法的情報リンク (将来用) -->

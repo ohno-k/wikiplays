@@ -57,6 +57,8 @@ onMounted(() => {
           <span class="opacity-30">·</span>
           <RouterLink to="/rules" class="hover:text-slate-600 hover:underline">遊び方</RouterLink>
           <span class="opacity-30">·</span>
+          <RouterLink to="/legal" class="hover:text-slate-600 hover:underline">特定商取引法に基づく表記</RouterLink>
+          <span class="opacity-30">·</span>
           <a href="mailto:wikiplays416@gmail.com" class="hover:text-slate-600 hover:underline">お問い合わせ</a>
         </div>
         <div class="text-center">

@@ -13,6 +13,7 @@ import OAuthCallbackView from '../views/OAuthCallbackView.vue'
 import DailyArchiveView from '../views/DailyArchiveView.vue'
 import RulesView from '../views/RulesView.vue'
 import FriendsView from '../views/FriendsView.vue'
+import LegalView from '../views/LegalView.vue'
 import ModeA from '../views/modes/ModeA.vue'
 import ModeB from '../views/modes/ModeB.vue'
 import ModeC from '../views/modes/ModeC.vue'
@@ -36,6 +37,7 @@ const router = createRouter({
     { path: '/daily-archive', name: 'daily-archive', component: DailyArchiveView },
     { path: '/rules', name: 'rules', component: RulesView },
     { path: '/friends', name: 'friends', component: FriendsView },
+    { path: '/legal', name: 'legal', component: LegalView },
     { path: '/mode/a', name: 'mode-a', component: ModeA },
     { path: '/mode/b', name: 'mode-b', component: ModeB },
     { path: '/mode/c', name: 'mode-c', component: ModeC },
