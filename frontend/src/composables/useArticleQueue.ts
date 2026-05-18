@@ -26,6 +26,8 @@ export interface ArticleQueueOptions<T> {
   scope?: Ref<Scope>
   /** コミュニティジャンル ID。指定されたら通常ジャンルより優先。 */
   communityGenreId?: Ref<number | null>
+  /** コミュニティジャンルプレイ時の JWT (Premium 検証用)。 */
+  token?: Ref<string | null>
 }
 
 export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
@@ -45,7 +47,7 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
       try {
         const communityId = options.communityGenreId?.value
         const a = communityId != null
-          ? await fetchCommunityRandomArticle(communityId)
+          ? await fetchCommunityRandomArticle(communityId, options.token?.value)
           : await fetchRandomArticle(options.genre?.value, options.scope?.value)
         // 既出記事は最大 maxAttempts/2 回までスキップ。
         // それを超えても重複が続くならプールが枯渇しているので諦めて出す。

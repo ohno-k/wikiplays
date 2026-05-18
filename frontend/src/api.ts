@@ -149,8 +149,12 @@ export async function deleteCommunityGenre(id: number): Promise<void> {
   if (!res.ok) throw new Error(`削除失敗 (HTTP ${res.status})`)
 }
 
-export async function fetchCommunityRandomArticle(genreId: number): Promise<ArticleData> {
-  const res = await fetch(`/api/community-genres/${genreId}/random`)
+export async function fetchCommunityRandomArticle(genreId: number, token?: string | null): Promise<ArticleData> {
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(`/api/community-genres/${genreId}/random`, { headers })
+  if (res.status === 401) throw new Error('ログインが必要です')
+  if (res.status === 402) throw new Error('コミュニティジャンルのプレイはプレミアムプラン限定です')
   if (!res.ok) throw new Error(`記事取得失敗 (HTTP ${res.status})`)
   return res.json()
 }

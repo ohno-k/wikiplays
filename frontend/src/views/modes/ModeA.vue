@@ -176,6 +176,7 @@ const queue = useArticleQueue<ModeAData>({
   genre: selectedGenre,
   scope: selectedScope,
   communityGenreId: selectedCommunityGenreId,
+  token,
   prepare: (a) => {
     const headingTitles = a.sections.map(s => s.title)
     const masked = splitParagraphs(a.fullExtract, headingTitles).map(p => maskTitle(p, a.title))

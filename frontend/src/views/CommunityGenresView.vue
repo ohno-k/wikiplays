@@ -92,8 +92,8 @@ onMounted(load)
       <div class="text-xs font-mono text-slate-500">COMMUNITY GENRES</div>
       <h1 class="text-2xl font-bold tracking-tight">コミュニティジャンル</h1>
       <p class="text-sm text-slate-600">
-        Wikipedia のカテゴリを指定して、あなただけのジャンルを作って公開できます。
-        作ったジャンルは A モードのプレイで選択できます。
+        Wikipedia のカテゴリで構成された、より深いジャンルで遊べます。
+        プレミアム会員は独自ジャンルを作って公開することもできます。
       </p>
     </div>
 
@@ -102,10 +102,10 @@ onMounted(load)
       <div class="text-sm">
         <div class="font-bold flex items-center gap-1">
           <span class="text-amber-500">⭐</span>
-          <span>ジャンル作成はプレミアム限定</span>
+          <span>プレイ・作成ともプレミアム限定</span>
         </div>
         <div class="text-xs text-slate-500 mt-0.5">
-          {{ isLoggedIn ? 'プレミアムにアップグレードすると独自ジャンルを作成できます' : 'ログイン後、プレミアムへの加入で作成可能になります' }}
+          {{ isLoggedIn ? '一覧の閲覧はフリーでも可能。プレイ・作成はプレミアムプランで解放されます' : 'ログイン後、プレミアム加入でプレイ・作成できます' }}
         </div>
       </div>
       <router-link :to="isLoggedIn ? '/account' : '/login'"
@@ -187,12 +187,20 @@ onMounted(load)
     </div>
 
     <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <router-link v-for="g in list" :key="g.id"
-        :to="`/mode/a?community=${g.id}`"
-        class="glass-card glass-card-hover p-4 flex items-start gap-3 relative">
+      <component
+        v-for="g in list" :key="g.id"
+        :is="isPremium ? 'router-link' : 'div'"
+        :to="isPremium ? `/mode/a?community=${g.id}` : undefined"
+        :class="[
+          'glass-card p-4 flex items-start gap-3 relative',
+          isPremium ? 'glass-card-hover cursor-pointer' : 'opacity-90'
+        ]">
         <div class="text-3xl">{{ g.emoji }}</div>
         <div class="flex-1 min-w-0">
-          <div class="font-bold truncate">{{ g.name }}</div>
+          <div class="font-bold truncate flex items-center gap-1">
+            <span>{{ g.name }}</span>
+            <span v-if="!isPremium" class="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-bold">⭐ PREMIUM</span>
+          </div>
           <div class="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
             <span>by {{ g.creatorName }}</span>
             <span>•</span>
@@ -202,6 +210,10 @@ onMounted(load)
             <span v-for="c in g.categories" :key="c"
               class="text-xs px-1.5 py-0.5 bg-slate-100 rounded">{{ c }}</span>
           </div>
+          <router-link v-if="!isPremium" :to="isLoggedIn ? '/account' : '/login'"
+            class="inline-block mt-2 text-xs px-2 py-1 bg-gradient-to-r from-amber-500 to-rose-500 text-white rounded font-bold">
+            {{ isLoggedIn ? 'アップグレードしてプレイ' : 'ログインしてプレイ' }}
+          </router-link>
         </div>
         <button v-if="g.mine"
           @click.prevent="handleDelete(g)"
@@ -209,7 +221,7 @@ onMounted(load)
           class="absolute top-2 right-2 text-xs text-slate-400 hover:text-red-500">
           ×
         </button>
-      </router-link>
+      </component>
     </div>
   </section>
 </template>

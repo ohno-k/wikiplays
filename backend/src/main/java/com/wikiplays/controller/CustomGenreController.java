@@ -116,7 +116,7 @@ public class CustomGenreController {
         return ResponseEntity.ok(toResponse(entity, req.creatorId()));
     }
 
-    /** 削除 (作成者のみ)。 */
+    /** 削除 (作成者のみ。Wikiplays 公式ジャンルは削除不可)。 */
     @DeleteMapping("/{id}")
     @Transactional
     public ResponseEntity<Void> delete(
@@ -125,18 +125,30 @@ public class CustomGenreController {
     ) {
         Optional<CustomGenre> opt = repository.findById(id);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
-        if (!opt.get().getCreatorId().equals(playerId)) return ResponseEntity.status(403).build();
+        CustomGenre target = opt.get();
+        if (com.wikiplays.service.CommunityGenreSeeder.OFFICIAL_CREATOR_ID.equals(target.getCreatorId())) {
+            return ResponseEntity.status(403).build();
+        }
+        if (!target.getCreatorId().equals(playerId)) return ResponseEntity.status(403).build();
         repository.deleteById(id);
         return ResponseEntity.noContent().build();
     }
 
     /**
      * 指定コミュニティジャンルでランダムな記事を取得 (出題用)。
+     * プレミアム会員限定。未ログインは 401、フリーは 402 を返す。
      * カテゴリ群を順次試して、フィルタを通過した記事を返す。
      */
     @GetMapping("/{id}/random")
     @Transactional
-    public ResponseEntity<ArticleData> random(@PathVariable("id") Long id) {
+    public ResponseEntity<ArticleData> random(@PathVariable("id") Long id, Authentication auth) {
+        if (auth == null || !(auth.getPrincipal() instanceof User user)) {
+            return ResponseEntity.status(401).build();
+        }
+        Subscription sub = subscriptionRepository.findByUserId(user.getId()).orElse(null);
+        if (sub == null || !sub.isPremiumActive()) {
+            return ResponseEntity.status(402).build();
+        }
         Optional<CustomGenre> opt = repository.findById(id);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         CustomGenre genre = opt.get();
