@@ -181,21 +181,24 @@ public class CustomGenreController {
             }
         }
 
-        // (2) Wikipedia フォールバック (短時間で諦める)
+        // (2) Wikipedia フォールバック (15 秒以内に諦める)
         List<String> categories = new ArrayList<>(Arrays.asList(genre.getCategoriesCsv().split("\t")));
         Collections.shuffle(categories);
         ArticleData firstFound = null;
         int totalFetched = 0;
-        final int MAX_FETCHES = 8;
+        final int MAX_FETCHES = 20;
+        final long DEADLINE_MS = System.currentTimeMillis() + 15_000;
 
         for (String cat : categories) {
-            if (totalFetched >= MAX_FETCHES && firstFound != null) break;
+            if (firstFound != null) break;
+            if (System.currentTimeMillis() > DEADLINE_MS) break;
             try {
                 List<String> members = wikipediaService.fetchCategoryMembers(cat, 30);
                 if (members.isEmpty()) continue;
                 Collections.shuffle(members);
                 for (String title : members) {
                     if (totalFetched >= MAX_FETCHES) break;
+                    if (System.currentTimeMillis() > DEADLINE_MS) break;
                     if (cachedArticleRepository.existsByTitle(title)) continue;
                     totalFetched++;
                     try {
@@ -204,18 +207,17 @@ public class CustomGenreController {
                             // DB にキャッシュ (次回以降は即時返却できる)
                             storeToCache(data, id);
                             if (firstFound == null) firstFound = data;
-                            // 1 件見つかったら抜ける (残りはバックグラウンドで補充される想定)
                             break;
                         }
                     } catch (Exception e) {
                         log.debug("fetch fail '{}': {}", title, e.getMessage());
                     }
                 }
-                if (firstFound != null) break;
             } catch (Exception e) {
                 log.warn("category fetch fail '{}': {}", cat, e.getMessage());
             }
         }
+        log.info("community random for id={}: fetched={}, found={}", id, totalFetched, firstFound != null);
 
         if (firstFound != null) {
             genre.setPlayCount(genre.getPlayCount() + 1);
