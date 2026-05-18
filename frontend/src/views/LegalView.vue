@@ -1,9 +1,38 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
+
 const CONTACT_EMAIL = 'wikiplays416@gmail.com'
 const SITE_NAME = 'Wikiplays'
 const SITE_URL = 'https://wikiplays.me'
 // 運営責任者の本名はここに記載 (公開必須項目)
 const OPERATOR_NAME = '大野 虹輝'
+
+// このページのみ検索エンジンへのインデックスを拒否する。
+// (個人情報が記載されているため、Google 等で本名検索したときにヒットさせない目的)
+// SPA なので index.html ではなく、本ビューがマウントされたタイミングで head に
+// meta タグを動的挿入し、離脱時に除去する。robots.txt の Disallow と二重防御。
+let injectedMetas: HTMLMetaElement[] = []
+function injectNoindex() {
+  const configs: Array<[string, string]> = [
+    ['robots',    'noindex, nofollow, noarchive, nosnippet'],
+    ['googlebot', 'noindex, nofollow, noarchive, nosnippet'],
+    ['bingbot',   'noindex, nofollow, noarchive, nosnippet'],
+  ]
+  for (const [name, content] of configs) {
+    const m = document.createElement('meta')
+    m.setAttribute('name', name)
+    m.setAttribute('content', content)
+    document.head.appendChild(m)
+    injectedMetas.push(m)
+  }
+}
+function removeNoindex() {
+  for (const m of injectedMetas) m.remove()
+  injectedMetas = []
+}
+
+onMounted(injectNoindex)
+onUnmounted(removeNoindex)
 </script>
 
 <template>
