@@ -38,6 +38,37 @@ async function fetchSubInfo() {
   } catch {}
 }
 
+/** Stripe から最新状態を引いて DB を同期。Webhook 取りこぼし時の救済。 */
+async function syncFromStripe(silent = false): Promise<boolean> {
+  try {
+    const res = await authFetch('/api/subscription/sync', { method: 'POST' })
+    if (!res.ok) {
+      if (!silent) message.value = '同期に失敗しました'
+      return false
+    }
+    const data = await res.json()
+    // 同期後の状態を再取得
+    await Promise.all([refresh(), fetchSubInfo()])
+    if (!silent && data.hasActiveSubscription) {
+      message.value = '✅ Stripe と同期しました'
+    } else if (!silent) {
+      message.value = 'Stripe にアクティブなサブスクは見つかりませんでした'
+    }
+    return data.hasActiveSubscription === true
+  } catch {
+    if (!silent) message.value = '同期に失敗しました'
+    return false
+  }
+}
+
+const syncing = ref(false)
+async function manualSync() {
+  syncing.value = true
+  message.value = null
+  try { await syncFromStripe(false) }
+  finally { syncing.value = false }
+}
+
 interface PlanInfo {
   id: '1m' | '3m' | '6m'
   name: string
@@ -60,6 +91,16 @@ onMounted(async () => {
     return
   }
   await Promise.all([refresh(), fetchSubInfo()])
+
+  // Webhook 取りこぼしの自動回復:
+  // - Stripe から戻ってきた直後 (?subscribed=1)
+  // - もしくは FREE プランのまま (Webhook 未到達の可能性)
+  // のいずれかで Stripe API を直接見て同期する。
+  const shouldAutoSync = route.query.subscribed || !subInfo.value?.premiumActive
+  if (shouldAutoSync) {
+    await syncFromStripe(true)
+  }
+
   if (route.query.subscribed) {
     message.value = subInfo.value?.trialing
       ? '✅ 7 日間の無料体験を開始しました!'
@@ -177,6 +218,14 @@ const planLabel = computed(() => {
         <button @click="manage" :disabled="loading"
           class="w-full px-4 py-2 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 disabled:opacity-50">
           {{ loading ? '読み込み中…' : '支払い・解約の管理 (Stripe)' }}
+        </button>
+      </div>
+
+      <!-- 状態がずれた時の手動同期ボタン (小さく目立たないように) -->
+      <div class="pt-1 text-right">
+        <button @click="manualSync" :disabled="syncing"
+          class="text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50">
+          {{ syncing ? '同期中…' : 'Stripe と同期する' }}
         </button>
       </div>
     </div>

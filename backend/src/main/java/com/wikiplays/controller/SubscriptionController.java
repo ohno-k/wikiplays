@@ -90,6 +90,24 @@ public class SubscriptionController {
         }
     }
 
+    /** Stripe から最新のサブスク状態を引いて DB を同期する。
+     *  Webhook 届かなかった等の救済策。冪等。 */
+    @PostMapping("/api/subscription/sync")
+    public ResponseEntity<?> sync(Authentication auth) {
+        if (auth == null || !(auth.getPrincipal() instanceof User user)) {
+            return ResponseEntity.status(401).build();
+        }
+        try {
+            boolean hasActive = stripeService.syncFromStripe(user);
+            return ResponseEntity.ok(Map.of("synced", true, "hasActiveSubscription", hasActive));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(503).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("sync error", e);
+            return ResponseEntity.status(500).body(Map.of("message", "同期に失敗しました"));
+        }
+    }
+
     /** Stripe Customer Portal セッション URL (解約・支払い管理)。 */
     @PostMapping("/api/subscription/portal")
     public ResponseEntity<?> portal(Authentication auth) {

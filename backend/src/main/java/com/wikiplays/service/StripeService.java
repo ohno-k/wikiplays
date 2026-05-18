@@ -2,9 +2,14 @@ package com.wikiplays.service;
 
 import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
+import com.stripe.model.Customer;
+import com.stripe.model.CustomerCollection;
 import com.stripe.model.Event;
+import com.stripe.model.SubscriptionCollection;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
+import com.stripe.param.CustomerListParams;
+import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.checkout.SessionCreateParams;
 import com.wikiplays.entity.Subscription;
 import com.wikiplays.entity.User;
@@ -127,6 +132,96 @@ public class StripeService {
 
         Session session = Session.create(builder.build());
         return session.getUrl();
+    }
+
+    /**
+     * Stripe から最新のサブスクリプション状態を取得し、ローカル DB を同期する。
+     * Webhook が届かなかった等で local 状態が古い場合の救済策。
+     *
+     * 動作:
+     *  1. ユーザーのメールアドレスで Stripe Customer を検索
+     *  2. その Customer のアクティブ (active/trialing/past_due) なサブスクを探す
+     *  3. Subscription エンティティを upsert
+     *
+     * セキュリティ: 認証済みユーザーの email でのみ検索するため、他人の Stripe
+     * アカウントを取得することはない (email 認証必須なので email の所有者が確定済)。
+     */
+    @Transactional
+    public boolean syncFromStripe(User user) throws StripeException {
+        ensureConfigured();
+
+        // 既存の Subscription レコードがあれば customerId を再利用
+        Optional<Subscription> existing = subscriptionRepository.findByUserId(user.getId());
+        String customerId = existing.map(Subscription::getStripeCustomerId).filter(s -> !s.isBlank()).orElse(null);
+
+        // customerId 未保存なら email から探す
+        if (customerId == null) {
+            CustomerListParams listParams = CustomerListParams.builder()
+                .setEmail(user.getEmail())
+                .setLimit(1L)
+                .build();
+            CustomerCollection customers = Customer.list(listParams);
+            if (!customers.getData().isEmpty()) {
+                customerId = customers.getData().get(0).getId();
+            }
+        }
+
+        if (customerId == null) {
+            log.info("syncFromStripe: no Stripe customer for user {}", user.getId());
+            return false;
+        }
+
+        // Customer の全サブスクから「active / trialing / past_due」のものを探す
+        SubscriptionListParams subParams = SubscriptionListParams.builder()
+            .setCustomer(customerId)
+            .setStatus(SubscriptionListParams.Status.ALL)
+            .setLimit(10L)
+            .build();
+        SubscriptionCollection subs = com.stripe.model.Subscription.list(subParams);
+
+        com.stripe.model.Subscription activeSub = null;
+        for (com.stripe.model.Subscription s : subs.getData()) {
+            String status = s.getStatus();
+            if ("active".equals(status) || "trialing".equals(status) || "past_due".equals(status)) {
+                activeSub = s;
+                break;
+            }
+        }
+
+        // ローカル Subscription を upsert
+        Subscription sub = existing.orElseGet(() -> {
+            Subscription s = new Subscription();
+            s.setUserId(user.getId());
+            s.setCreatedAt(Instant.now());
+            return s;
+        });
+        sub.setStripeCustomerId(customerId);
+
+        if (activeSub != null) {
+            sub.setStripeSubscriptionId(activeSub.getId());
+            sub.setPlan("PREMIUM");
+            sub.setStatus(mapStripeStatus(activeSub.getStatus()));
+            if (activeSub.getCurrentPeriodEnd() != null) {
+                sub.setCurrentPeriodEnd(Instant.ofEpochSecond(activeSub.getCurrentPeriodEnd()));
+            }
+            if (activeSub.getTrialEnd() != null) {
+                sub.setTrialEnd(Instant.ofEpochSecond(activeSub.getTrialEnd()));
+            } else {
+                sub.setTrialEnd(null);
+            }
+            sub.setCancelledAt(Boolean.TRUE.equals(activeSub.getCancelAtPeriodEnd()) ? Instant.now() : null);
+        } else {
+            // アクティブなサブスクなし
+            sub.setPlan("FREE");
+            sub.setStatus("ACTIVE");
+            sub.setTrialEnd(null);
+            sub.setCurrentPeriodEnd(null);
+        }
+        sub.setUpdatedAt(Instant.now());
+        subscriptionRepository.save(sub);
+        log.info("syncFromStripe: synced user {} -> plan={}, status={}",
+            user.getId(), sub.getPlan(), sub.getStatus());
+        return activeSub != null;
     }
 
     /** ユーザーが今 (新規) Checkout で 7 日間トライアルの対象かどうか。 */
