@@ -7,10 +7,20 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:postgres}
   jpa:
     hibernate:
-      ddl-auto: update
+      # Flyway がスキーマを管理するので、Hibernate は何もしない (起動が速くなる)。
+      # 移行が安定したら validate に上げて、エンティティと DB のズレ検知を有効化する。
+      ddl-auto: none
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    # 既存の本番 DB (Hibernate ddl-auto で作られた状態) は flyway_schema_history を持たないので、
+    # 初回起動時に baseline-on-migrate=true で「V1 適用済み」とマークし V1 は実行されない。
+    # 新規環境 (空 DB) では V1__init.sql から順に実行される。
+    baseline-on-migrate: true
+    baseline-version: 1
+    locations: classpath:db/migration
   mail:
     host: ${MAIL_HOST:}
     port: ${MAIL_PORT:587}

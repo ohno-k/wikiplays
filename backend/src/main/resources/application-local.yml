@@ -14,10 +14,15 @@ spring:
     port: 25
   jpa:
     hibernate:
+      # ローカルは H2 インメモリで毎回ゼロから作るので Hibernate の自動生成で十分。
+      # 本番では Flyway 管理に切り替わる (application.yml 側で validate)。
       ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    # ローカル H2 では Flyway を無効化 (Hibernate が ddl-auto:update で全部作る)
+    enabled: false
   h2:
     console:
       enabled: true
