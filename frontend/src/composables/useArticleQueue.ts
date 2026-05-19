@@ -37,18 +37,27 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
   // セッション内で出題済みのタイトルを記録し、連続して同じ問題が出ないようにする。
   // プールに記事が少ない (ジャンル×scope バケットに数件) ときの重複出題対策。
   const seenTitles = new Set<string>()
+  // 直前に出題したタイトル。プールが小さくてもこれだけは絶対に back-to-back で出さない。
+  let lastTitle: string | null = null
 
   async function findOne(): Promise<T> {
     let attempts = 0
     let lastFetchError: unknown = null
     let prepareRejects = 0
     let duplicateSkips = 0
+    let lastTitleSkips = 0
     while (attempts < maxAttempts) {
       try {
         const communityId = options.communityGenreId?.value
         const a = communityId != null
-          ? await fetchCommunityRandomArticle(communityId, options.token?.value)
+          ? await fetchCommunityRandomArticle(communityId, options.token?.value, Array.from(seenTitles))
           : await fetchRandomArticle(options.genre?.value, options.scope?.value)
+        // 直前の記事と同一なら最大試行 - 1 回まで強制スキップ (back-to-back 防止)
+        if (a.title === lastTitle && lastTitleSkips < maxAttempts - 1) {
+          lastTitleSkips++
+          attempts++
+          continue
+        }
         // 既出記事は最大 maxAttempts/2 回までスキップ。
         // それを超えても重複が続くならプールが枯渇しているので諦めて出す。
         if (seenTitles.has(a.title) && duplicateSkips < Math.floor(maxAttempts / 2)) {
@@ -59,6 +68,7 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
         const prepared = await options.prepare(a)
         if (prepared !== null && prepared !== undefined) {
           seenTitles.add(a.title)
+          lastTitle = a.title
           return prepared
         }
         prepareRejects++
@@ -101,6 +111,7 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
   function reset() {
     cache.value = null
     seenTitles.clear()
+    lastTitle = null
   }
 
   return { pull, prefetch, reset, prefetching }

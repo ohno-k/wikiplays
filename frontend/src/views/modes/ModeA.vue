@@ -8,7 +8,7 @@ import type { ArticleData, Genre, Scope } from '../../types'
 import { scoreEmoji } from '../../scoring'
 import { maskTitle, splitParagraphs } from '../../masking'
 import { useArticleQueue } from '../../composables/useArticleQueue'
-import { fetchCommunityGenres, recordPlay, fetchPlayQuota, submitPlayRecord, type CommunityGenre, type PlayQuota } from '../../api'
+import { fetchCommunityGenres, recordPlay, fetchPlayQuota, submitPlayRecord, recordCommunityGenrePlay, type CommunityGenre, type PlayQuota } from '../../api'
 import ResultShareCard from '../../components/ResultShareCard.vue'
 import { useAuth } from '../../composables/useAuth'
 
@@ -291,6 +291,9 @@ function restart() {
   results.value = []
   currentQ.value = 1
   queue.reset()
+  if (selectedCommunityGenreId.value != null) {
+    recordCommunityGenrePlay(selectedCommunityGenreId.value, token.value)
+  }
   loadNext()
 }
 
@@ -316,6 +319,7 @@ function onCommunityGenreSelected(cg: CommunityGenre) {
   currentQ.value = 1
   queue.reset()
   started.value = true
+  recordCommunityGenrePlay(cg.id, token.value)
   loadNext()
   router.replace({ query: { ...route.query, community: String(cg.id) } })
 }

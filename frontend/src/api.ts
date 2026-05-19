@@ -149,10 +149,36 @@ export async function deleteCommunityGenre(id: number): Promise<void> {
   if (!res.ok) throw new Error(`削除失敗 (HTTP ${res.status})`)
 }
 
-export async function fetchCommunityRandomArticle(genreId: number, token?: string | null): Promise<ArticleData> {
+/**
+ * コミュニティジャンルでのプレイ開始を記録する (1 セッションにつき 1 回だけ呼ぶ)。
+ * 失敗は無視 (集計用なので致命的ではない)。
+ */
+export async function recordCommunityGenrePlay(genreId: number, token?: string | null): Promise<void> {
+  try {
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    await fetch(`/api/community-genres/${genreId}/play`, { method: 'POST', headers })
+  } catch {
+    // ignore
+  }
+}
+
+export async function fetchCommunityRandomArticle(
+  genreId: number,
+  token?: string | null,
+  excludeTitles?: string[],
+): Promise<ArticleData> {
   const headers: Record<string, string> = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
-  const res = await fetch(`/api/community-genres/${genreId}/random`, { headers })
+  let url = `/api/community-genres/${genreId}/random`
+  if (excludeTitles && excludeTitles.length > 0) {
+    // URL 長を抑えるため直近 30 件までに絞る
+    const recent = excludeTitles.slice(-30)
+    const params = new URLSearchParams()
+    for (const t of recent) params.append('exclude', t)
+    url += `?${params.toString()}`
+  }
+  const res = await fetch(url, { headers })
   if (res.status === 401) throw new Error('ログインが必要です')
   if (res.status === 402) throw new Error('コミュニティジャンルのプレイはプレミアムプラン限定です')
   if (!res.ok) throw new Error(`記事取得失敗 (HTTP ${res.status})`)

@@ -154,7 +154,11 @@ public class CustomGenreController {
      */
     @GetMapping("/{id}/random")
     @Transactional
-    public ResponseEntity<ArticleData> random(@PathVariable("id") Long id, Authentication auth) {
+    public ResponseEntity<ArticleData> random(
+        @PathVariable("id") Long id,
+        @RequestParam(name = "exclude", required = false) List<String> excludeTitles,
+        Authentication auth
+    ) {
         if (auth == null || !(auth.getPrincipal() instanceof User user)) {
             return ResponseEntity.status(401).build();
         }
@@ -166,14 +170,16 @@ public class CustomGenreController {
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         CustomGenre genre = opt.get();
 
-        // (1) キャッシュから引く
-        Optional<CachedArticle> cached = cachedArticleRepository.findRandomByCommunityGenreId(id);
+        // (1) キャッシュから引く (exclude 指定があれば除外)
+        Optional<CachedArticle> cached = (excludeTitles != null && !excludeTitles.isEmpty())
+            ? cachedArticleRepository.findRandomByCommunityGenreIdExcluding(id, excludeTitles)
+            : cachedArticleRepository.findRandomByCommunityGenreId(id);
         if (cached.isPresent()) {
             CachedArticle c = cached.get();
             c.setLastUsedAt(Instant.now());
             try {
                 ArticleData data = objectMapper.readValue(c.getDataJson(), ArticleData.class);
-                genre.setPlayCount(genre.getPlayCount() + 1);
+                // playCount は記事 1 件ごとには加算しない (POST /{id}/play でセッション単位に加算する)
                 return ResponseEntity.ok(data);
             } catch (JsonProcessingException e) {
                 log.warn("failed to deserialize cached article id={}: {}", c.getId(), e.getMessage());
@@ -182,12 +188,16 @@ public class CustomGenreController {
         }
 
         // (2) Wikipedia フォールバック (15 秒以内に諦める)
+        //     キャッシュが空、または exclude で全弾打ち尽くした場合に走る
         List<String> categories = new ArrayList<>(Arrays.asList(genre.getCategoriesCsv().split("\t")));
         Collections.shuffle(categories);
         ArticleData firstFound = null;
         int totalFetched = 0;
         final int MAX_FETCHES = 20;
         final long DEADLINE_MS = System.currentTimeMillis() + 15_000;
+        java.util.Set<String> excludeSet = excludeTitles == null
+            ? java.util.Collections.emptySet()
+            : new java.util.HashSet<>(excludeTitles);
 
         for (String cat : categories) {
             if (firstFound != null) break;
@@ -199,6 +209,7 @@ public class CustomGenreController {
                 for (String title : members) {
                     if (totalFetched >= MAX_FETCHES) break;
                     if (System.currentTimeMillis() > DEADLINE_MS) break;
+                    if (excludeSet.contains(title)) continue;
                     if (cachedArticleRepository.existsByTitle(title)) continue;
                     totalFetched++;
                     try {
@@ -217,13 +228,36 @@ public class CustomGenreController {
                 log.warn("category fetch fail '{}': {}", cat, e.getMessage());
             }
         }
-        log.info("community random for id={}: fetched={}, found={}", id, totalFetched, firstFound != null);
+        log.info("community random for id={}: fetched={}, found={}, excludeCount={}",
+            id, totalFetched, firstFound != null, excludeSet.size());
 
         if (firstFound != null) {
-            genre.setPlayCount(genre.getPlayCount() + 1);
+            // playCount は記事 1 件ごとには加算しない (POST /{id}/play で別カウント)
             return ResponseEntity.ok(firstFound);
         }
         return ResponseEntity.status(503).build();
+    }
+
+    /**
+     * プレイ開始を記録する。フロントエンド側で 1 セッションごとに 1 回だけ呼ぶ。
+     * /random は 1 問につき複数回呼ばれる (先読み・重複スキップ) ため、
+     * プレイ回数として正確に集計するにはこちらで加算する必要がある。
+     */
+    @PostMapping("/{id}/play")
+    @Transactional
+    public ResponseEntity<Void> recordPlay(@PathVariable("id") Long id, Authentication auth) {
+        if (auth == null || !(auth.getPrincipal() instanceof User user)) {
+            return ResponseEntity.status(401).build();
+        }
+        Subscription sub = subscriptionRepository.findByUserId(user.getId()).orElse(null);
+        if (sub == null || !sub.isPremiumActive()) {
+            return ResponseEntity.status(402).build();
+        }
+        Optional<CustomGenre> opt = repository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        CustomGenre genre = opt.get();
+        genre.setPlayCount(genre.getPlayCount() + 1);
+        return ResponseEntity.noContent().build();
     }
 
     private void storeToCache(ArticleData data, Long communityGenreId) {

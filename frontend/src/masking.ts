@@ -12,12 +12,13 @@ function escapeRegex(s: string): string {
  * タイトルの各文字間に「最大 1 個の空白 (半角/全角)」を許容する正規表現を作る。
  * Wikipedia は日本人名で「相原 信行」のように姓と名の間に半角スペースを入れる
  * 慣習があるため、タイトル「相原信行」のままだと本文側でマッチしないことへの対策。
+ * i フラグで大文字小文字差 (R2BEAT vs R2Beat vs r2beat) も吸収する。
  */
 function buildTolerantTitleRegex(title: string): RegExp {
   const chars = Array.from(title)
   if (chars.length === 0) return /(?!)/g
   const pattern = chars.map(escapeRegex).join('[ 　]?')
-  return new RegExp(pattern, 'g')
+  return new RegExp(pattern, 'gi')
 }
 
 /**
@@ -34,7 +35,7 @@ function detectPersonNameParts(text: string, title: string): string[] | null {
     // 姓・名はそれぞれ 1 文字以上、片方が 1 文字だけの場合は誤検出リスクが高いので除外
     if (left.length < 2 || right.length < 2) continue
     const pattern = escapeRegex(left) + '[ 　]+' + escapeRegex(right)
-    if (new RegExp(pattern).test(text)) {
+    if (new RegExp(pattern, 'i').test(text)) {
       return [left, right]
     }
   }
@@ -61,7 +62,7 @@ export function maskTitle(text: string, title: string): string {
   const parts = detectPersonNameParts(text, title)
   if (parts) {
     for (const p of parts) {
-      out = out.replace(new RegExp(escapeRegex(p), 'g'), MASK_TOKEN)
+      out = out.replace(new RegExp(escapeRegex(p), 'gi'), MASK_TOKEN)
     }
   }
 

@@ -51,6 +51,20 @@ public interface CachedArticleRepository extends JpaRepository<CachedArticle, Lo
         nativeQuery = true)
     Optional<CachedArticle> findRandomByCommunityGenreId(@Param("cid") Long communityGenreId);
 
+    /**
+     * コミュニティジャンル指定でランダムに 1 件 (指定タイトルを除外)。
+     * セッション中に既に出題した記事と被らないようにするためのもの。
+     */
+    @Query(value =
+        "SELECT * FROM cached_article WHERE community_genre_id = :cid " +
+        "AND title NOT IN (:excludeTitles) " +
+        "ORDER BY RANDOM() LIMIT 1",
+        nativeQuery = true)
+    Optional<CachedArticle> findRandomByCommunityGenreIdExcluding(
+        @Param("cid") Long communityGenreId,
+        @Param("excludeTitles") List<String> excludeTitles
+    );
+
     /** コミュニティジャンル指定でキャッシュ件数。 */
     long countByCommunityGenreId(Long communityGenreId);
 }
