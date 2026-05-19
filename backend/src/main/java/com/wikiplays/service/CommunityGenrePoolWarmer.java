@@ -10,6 +10,7 @@ import com.wikiplays.repository.CustomGenreRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -77,6 +78,23 @@ public class CommunityGenrePoolWarmer {
      * @param targetCount 新規追加したい上限件数
      * @param deadlineMs このメソッドの最大処理時間 (ミリ秒)
      */
+    /**
+     * 非ブロッキングでプールを温める (リクエスト応答中に呼ぶ用)。
+     * 同一ジャンルに対する重複起動は防がず、内部の existsByTitle と deadline で自然に収束する。
+     */
+    @Async
+    public void warmGenreAsync(CustomGenre genre) {
+        if (!enabled || genre == null) return;
+        try {
+            WarmResult r = warmGenre(genre, perGenreTarget, scheduledDeadlineMs);
+            if (r.newlyCached() > 0) {
+                log.info("async warm done id={} name='{}' newly={}", genre.getId(), genre.getName(), r.newlyCached());
+            }
+        } catch (Exception e) {
+            log.warn("async warm failed id={}: {}", genre.getId(), e.getMessage());
+        }
+    }
+
     public WarmResult warmGenre(CustomGenre genre, int targetCount, long deadlineMs) {
         int newlyCached = 0;
         int attempted = 0;

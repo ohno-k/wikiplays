@@ -6,6 +6,7 @@ import com.wikiplays.entity.Subscription;
 import com.wikiplays.entity.User;
 import com.wikiplays.repository.SubscriptionRepository;
 import com.wikiplays.service.AuthService;
+import com.wikiplays.service.XpService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,10 +23,12 @@ public class AuthController {
 
     private final AuthService authService;
     private final SubscriptionRepository subscriptionRepository;
+    private final XpService xpService;
 
-    public AuthController(AuthService authService, SubscriptionRepository subscriptionRepository) {
+    public AuthController(AuthService authService, SubscriptionRepository subscriptionRepository, XpService xpService) {
         this.authService = authService;
         this.subscriptionRepository = subscriptionRepository;
+        this.xpService = xpService;
     }
 
     @PostMapping("/register")
@@ -55,22 +58,21 @@ public class AuthController {
         if (auth == null || !(auth.getPrincipal() instanceof User user)) {
             return ResponseEntity.status(401).build();
         }
-        Optional<Subscription> sub = subscriptionRepository.findByUserId(user.getId());
-        String plan = sub.map(Subscription::getPlan).orElse("FREE");
-        boolean premiumActive = sub.map(Subscription::isPremiumActive).orElse(false);
-        return ResponseEntity.ok(new AuthResponse.UserInfo(
-            user.getId(), user.getEmail(), user.getDisplayName(), user.getRole(), plan, premiumActive
-        ));
+        return ResponseEntity.ok(toUserInfo(user));
     }
 
     private AuthResponse toResponse(AuthService.AuthResult result) {
-        User u = result.user();
+        return new AuthResponse(result.token(), toUserInfo(result.user()));
+    }
+
+    private AuthResponse.UserInfo toUserInfo(User u) {
         Optional<Subscription> sub = subscriptionRepository.findByUserId(u.getId());
         String plan = sub.map(Subscription::getPlan).orElse("FREE");
         boolean premiumActive = sub.map(Subscription::isPremiumActive).orElse(false);
-        return new AuthResponse(
-            result.token(),
-            new AuthResponse.UserInfo(u.getId(), u.getEmail(), u.getDisplayName(), u.getRole(), plan, premiumActive)
+        XpService.XpInfo xp = xpService.describe(u);
+        return new AuthResponse.UserInfo(
+            u.getId(), u.getEmail(), u.getDisplayName(), u.getRole(), plan, premiumActive,
+            xp.xp(), xp.level(), xp.xpIntoLevel(), xp.xpForNextLevel()
         );
     }
 

@@ -176,6 +176,28 @@ public class CustomGenreController {
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         CustomGenre genre = opt.get();
 
+        // (0) セッションでプールを使い切っているなら、Wikipedia の 20 秒待ちをスキップして
+        //     即座に重複から返す。同時にバックグラウンドでプールを補充する。
+        //     プールが小さい (数件) コミュニティジャンルで Q2 以降がブラウザタイムアウトする問題への対策。
+        long poolSize = cachedArticleRepository.countByCommunityGenreId(id);
+        int excludeSize = excludeTitles == null ? 0 : excludeTitles.size();
+        if (poolSize > 0 && excludeSize >= poolSize) {
+            poolWarmer.warmGenreAsync(genre);
+            Optional<CachedArticle> dup = cachedArticleRepository.findRandomByCommunityGenreId(id);
+            if (dup.isPresent()) {
+                CachedArticle c = dup.get();
+                c.setLastUsedAt(Instant.now());
+                try {
+                    ArticleData data = objectMapper.readValue(c.getDataJson(), ArticleData.class);
+                    log.debug("community random id={}: pool exhausted (size={}, excluded={}), returning duplicate",
+                        id, poolSize, excludeSize);
+                    return ResponseEntity.ok(data);
+                } catch (JsonProcessingException e) {
+                    log.warn("failed to deserialize cached article id={}: {}", c.getId(), e.getMessage());
+                }
+            }
+        }
+
         // (1) キャッシュから引く (exclude 指定があれば除外)
         Optional<CachedArticle> cached = (excludeTitles != null && !excludeTitles.isEmpty())
             ? cachedArticleRepository.findRandomByCommunityGenreIdExcluding(id, excludeTitles)
@@ -248,6 +270,7 @@ public class CustomGenreController {
         if (excludeTitles != null && !excludeTitles.isEmpty()) {
             Optional<CachedArticle> anyCached = cachedArticleRepository.findRandomByCommunityGenreId(id);
             if (anyCached.isPresent()) {
+                poolWarmer.warmGenreAsync(genre);
                 CachedArticle c = anyCached.get();
                 c.setLastUsedAt(Instant.now());
                 try {
@@ -260,6 +283,8 @@ public class CustomGenreController {
             }
         }
 
+        // プールも Wikipedia も駄目だったので 503。次回プレイ時に向けて非同期で温める。
+        poolWarmer.warmGenreAsync(genre);
         return ResponseEntity.status(503).build();
     }
 
@@ -326,6 +351,13 @@ public class CustomGenreController {
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         CustomGenre genre = opt.get();
         genre.setPlayCount(genre.getPlayCount() + 1);
+
+        // プレイ開始時に、プールが小さければバックグラウンドで補充をキック。
+        // 5 問のセッションを快適に回すには最低 10 件程度ほしい。
+        long poolSize = cachedArticleRepository.countByCommunityGenreId(id);
+        if (poolSize < 10) {
+            poolWarmer.warmGenreAsync(genre);
+        }
         return ResponseEntity.noContent().build();
     }
 

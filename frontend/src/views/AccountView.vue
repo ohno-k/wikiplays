@@ -153,6 +153,12 @@ const planLabel = computed(() => {
   if (user.value.premiumActive) return 'プレミアム'
   return 'フリー'
 })
+
+const xpPercent = computed(() => {
+  const u = user.value
+  if (!u || !u.xpForNextLevel) return 0
+  return Math.min(100, Math.max(0, (u.xpIntoLevel / u.xpForNextLevel) * 100))
+})
 </script>
 
 <template>
@@ -163,6 +169,33 @@ const planLabel = computed(() => {
       <div class="text-xs font-mono text-slate-500">ACCOUNT</div>
       <h1 class="text-2xl font-bold tracking-tight">{{ user.displayName }}</h1>
       <div class="text-sm text-slate-500">{{ user.email }}</div>
+    </div>
+
+    <!-- 経験値・レベル -->
+    <div v-if="user.level != null" class="glass-card p-5 space-y-3">
+      <div class="flex items-baseline justify-between">
+        <div class="text-xs font-mono text-slate-500">EXPERIENCE</div>
+        <div class="text-xs text-slate-400">累計 {{ user.xp ?? 0 }} XP</div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="inline-flex items-center justify-center w-12 h-12 rounded-full
+                     bg-gradient-to-br from-sky-500 to-indigo-600 text-white font-bold shadow-glow-blue">
+          Lv.{{ user.level }}
+        </span>
+        <div class="flex-1 space-y-1">
+          <div class="h-3 bg-slate-200 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all"
+              :style="{ width: `${xpPercent}%` }"></div>
+          </div>
+          <div class="text-xs text-slate-500 flex justify-between">
+            <span>{{ user.xpIntoLevel ?? 0 }} / {{ user.xpForNextLevel ?? 0 }} XP</span>
+            <span>次のレベルまで {{ Math.max(0, (user.xpForNextLevel ?? 0) - (user.xpIntoLevel ?? 0)) }} XP</span>
+          </div>
+        </div>
+      </div>
+      <div class="text-xs text-slate-400">
+        プレイすると経験値を獲得できます (1 プレイあたり 最大 110 XP / 日 300 XP まで)。
+      </div>
     </div>
 
     <div v-if="message" class="glass-card p-3 text-sm text-blue-700">{{ message }}</div>

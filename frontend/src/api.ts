@@ -241,6 +241,19 @@ export async function fetchPlayQuota(token?: string | null): Promise<PlayQuota> 
   return res.json()
 }
 
+export interface PlayRecordResult {
+  id: number
+  /** ログイン時のみ。匿名プレイ時は undefined。 */
+  xpGained?: number
+  xpCapped?: boolean
+  leveledUp?: boolean
+  xp?: number
+  level?: number
+  xpIntoLevel?: number
+  xpForNextLevel?: number
+  dailyRemaining?: number
+}
+
 export async function submitPlayRecord(record: {
   mode: 'a' | 'daily'
   genre: Genre | null
@@ -249,14 +262,16 @@ export async function submitPlayRecord(record: {
   score: number
   maxScore: number
   difficulty?: string
-}, token?: string | null): Promise<void> {
+}, token?: string | null): Promise<PlayRecordResult | null> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
-  await fetch('/api/play/record', {
+  const res = await fetch('/api/play/record', {
     method: 'POST',
     headers,
     body: JSON.stringify({ ...record, playerId: getPlayerId() }),
   })
+  if (!res.ok) return null
+  try { return await res.json() } catch { return null }
 }
 
 export interface LeaderboardRow {

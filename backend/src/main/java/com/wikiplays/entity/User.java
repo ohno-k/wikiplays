@@ -10,6 +10,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 /**
  * 認証済みユーザー。
@@ -55,6 +56,18 @@ public class User {
     @Column
     private Instant lastLoginAt;
 
+    /** 累計獲得 XP。レベルは XP から導出するため別カラムには持たない。 */
+    @Column(nullable = false)
+    private long xp = 0L;
+
+    /** 当日中に獲得した XP (デイリーキャップ判定用)。xpDay と組で運用。 */
+    @Column(name = "xp_earned_today", nullable = false)
+    private int xpEarnedToday = 0;
+
+    /** xpEarnedToday が指す日付。日付が変われば 0 リセット。 */
+    @Column(name = "xp_day")
+    private LocalDate xpDay;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getEmail() { return email; }
@@ -73,4 +86,10 @@ public class User {
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getLastLoginAt() { return lastLoginAt; }
     public void setLastLoginAt(Instant lastLoginAt) { this.lastLoginAt = lastLoginAt; }
+    public long getXp() { return xp; }
+    public void setXp(long xp) { this.xp = xp; }
+    public int getXpEarnedToday() { return xpEarnedToday; }
+    public void setXpEarnedToday(int xpEarnedToday) { this.xpEarnedToday = xpEarnedToday; }
+    public LocalDate getXpDay() { return xpDay; }
+    public void setXpDay(LocalDate xpDay) { this.xpDay = xpDay; }
 }

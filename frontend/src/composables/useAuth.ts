@@ -7,6 +7,10 @@ export interface UserInfo {
   role: string
   plan: 'FREE' | 'PREMIUM'
   premiumActive: boolean
+  xp: number
+  level: number
+  xpIntoLevel: number
+  xpForNextLevel: number
 }
 
 interface AuthResponse {

@@ -8,11 +8,12 @@ import type { ArticleData, Genre, Scope } from '../../types'
 import { scoreEmoji } from '../../scoring'
 import { maskTitle, splitParagraphs } from '../../masking'
 import { useArticleQueue } from '../../composables/useArticleQueue'
-import { fetchCommunityGenres, recordPlay, fetchPlayQuota, submitPlayRecord, recordCommunityGenrePlay, type CommunityGenre, type PlayQuota } from '../../api'
+import { fetchCommunityGenres, recordPlay, fetchPlayQuota, submitPlayRecord, recordCommunityGenrePlay, type CommunityGenre, type PlayQuota, type PlayRecordResult } from '../../api'
 import ResultShareCard from '../../components/ResultShareCard.vue'
 import { useAuth } from '../../composables/useAuth'
 
-const { token, isLoggedIn } = useAuth()
+const { token, isLoggedIn, refresh: refreshAuth } = useAuth()
+const xpResult = ref<PlayRecordResult | null>(null)
 
 const route = useRoute()
 const router = useRouter()
@@ -290,6 +291,7 @@ function nextQuestion() {
 function restart() {
   results.value = []
   currentQ.value = 1
+  xpResult.value = null
   queue.reset()
   if (selectedCommunityGenreId.value != null) {
     recordCommunityGenrePlay(selectedCommunityGenreId.value, token.value)
@@ -388,7 +390,11 @@ watch(finished, (v) => {
       score: totalScore.value,
       maxScore: 1000 * TOTAL_QUESTIONS,
       difficulty: selectedDifficulty.value,
-    }, token.value).then(() => refreshQuota()).catch(() => {})
+    }, token.value).then((result) => {
+      xpResult.value = result
+      refreshQuota()
+      if (result && result.xpGained != null) refreshAuth()
+    }).catch(() => {})
   }
 })
 
@@ -474,6 +480,38 @@ onMounted(refreshQuota)
       <div class="bg-blue-50 border border-blue-200 rounded p-4">
         <div class="text-sm text-blue-900">最終スコア</div>
         <div class="text-3xl font-bold text-blue-700">{{ totalScore }} / {{ 1000 * TOTAL_QUESTIONS }}</div>
+      </div>
+
+      <!-- XP 獲得表示 (ログイン時のみ) -->
+      <div v-if="xpResult && xpResult.xpGained != null"
+        :class="[
+          'rounded-lg p-4 space-y-2 border',
+          xpResult.leveledUp
+            ? 'bg-gradient-to-r from-amber-50 to-rose-50 border-amber-300'
+            : 'bg-emerald-50 border-emerald-200'
+        ]">
+        <div class="flex items-baseline justify-between">
+          <div class="text-sm font-mono text-slate-500">EXPERIENCE</div>
+          <div v-if="xpResult.leveledUp" class="text-sm font-bold text-amber-600">
+            ✨ LEVEL UP! → Lv.{{ xpResult.level }}
+          </div>
+          <div v-else class="text-sm font-bold text-emerald-700">Lv.{{ xpResult.level }}</div>
+        </div>
+        <div class="text-2xl font-bold text-slate-800">
+          +{{ xpResult.xpGained }} XP
+          <span v-if="xpResult.xpCapped" class="text-xs font-normal text-slate-500 ml-2">
+            (本日のキャップに到達)
+          </span>
+        </div>
+        <div v-if="xpResult.xpForNextLevel != null && xpResult.xpIntoLevel != null"
+          class="h-2 bg-slate-200 rounded-full overflow-hidden">
+          <div class="h-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all"
+            :style="{ width: `${Math.min(100, (xpResult.xpIntoLevel / xpResult.xpForNextLevel) * 100)}%` }"></div>
+        </div>
+        <div class="text-xs text-slate-500 flex justify-between">
+          <span>{{ xpResult.xpIntoLevel }} / {{ xpResult.xpForNextLevel }} XP</span>
+          <span v-if="xpResult.dailyRemaining != null">本日の残り獲得可能: {{ xpResult.dailyRemaining }} XP</span>
+        </div>
       </div>
       <div class="bg-white border border-slate-200 rounded p-4 space-y-2">
         <div v-for="(r, i) in results" :key="i" class="flex justify-between text-sm">

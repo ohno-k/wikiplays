@@ -10,6 +10,10 @@ public record AuthResponse(
         String displayName,
         String role,
         String plan,
-        boolean premiumActive
+        boolean premiumActive,
+        long xp,
+        int level,
+        long xpIntoLevel,
+        long xpForNextLevel
     ) {}
 }
