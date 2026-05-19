@@ -32,15 +32,15 @@ public class CommunityGenrePoolWarmer {
     private static final Logger log = LoggerFactory.getLogger(CommunityGenrePoolWarmer.class);
 
     /** 1 ジャンルあたり保持したい目標プール数 (これ未満のジャンルだけ定期補充の対象)。 */
-    @Value("${wikiplays.community.target-pool-size:30}")
+    @Value("${wikiplays.community.target-pool-size:50}")
     private long targetPoolSize;
 
     /** 定期実行 1 サイクルで補充するジャンル数の上限。 */
-    @Value("${wikiplays.community.max-genres-per-cycle:3}")
+    @Value("${wikiplays.community.max-genres-per-cycle:5}")
     private int maxGenresPerCycle;
 
     /** 定期実行で 1 ジャンルあたり追加する目標件数。 */
-    @Value("${wikiplays.community.per-genre-target:5}")
+    @Value("${wikiplays.community.per-genre-target:8}")
     private int perGenreTarget;
 
     /** 定期実行 1 ジャンルあたりのデッドライン (ミリ秒)。 */
@@ -142,11 +142,11 @@ public class CommunityGenrePoolWarmer {
 
     /**
      * 定期補充: プールが targetPoolSize 未満のコミュニティジャンルを少しずつ補充する。
-     * fixedDelay は前回終了から N ミリ秒。デフォルト 20 分。
+     * fixedDelay は前回終了から N ミリ秒。デフォルト 10 分。
      * 起動直後は混雑するので initialDelay でずらす。
      */
     @Scheduled(
-        fixedDelayString = "${wikiplays.community.refill-interval:1200000}",
+        fixedDelayString = "${wikiplays.community.refill-interval:600000}",
         initialDelay = 180_000
     )
     public void scheduledRefill() {
