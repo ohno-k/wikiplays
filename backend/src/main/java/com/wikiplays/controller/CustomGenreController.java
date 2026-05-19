@@ -13,6 +13,7 @@ import com.wikiplays.repository.CachedArticleRepository;
 import com.wikiplays.repository.CustomGenreRepository;
 import com.wikiplays.repository.SubscriptionRepository;
 import com.wikiplays.service.ArticleFilter;
+import com.wikiplays.service.CommunityGenrePoolWarmer;
 import com.wikiplays.service.WikipediaService;
 import org.springframework.security.core.Authentication;
 import org.slf4j.Logger;
@@ -51,6 +52,7 @@ public class CustomGenreController {
     private final ArticleFilter filter;
     private final SubscriptionRepository subscriptionRepository;
     private final CachedArticleRepository cachedArticleRepository;
+    private final CommunityGenrePoolWarmer poolWarmer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public CustomGenreController(
@@ -58,13 +60,15 @@ public class CustomGenreController {
         WikipediaService wikipediaService,
         ArticleFilter filter,
         SubscriptionRepository subscriptionRepository,
-        CachedArticleRepository cachedArticleRepository
+        CachedArticleRepository cachedArticleRepository,
+        CommunityGenrePoolWarmer poolWarmer
     ) {
         this.repository = repository;
         this.wikipediaService = wikipediaService;
         this.filter = filter;
         this.subscriptionRepository = subscriptionRepository;
         this.cachedArticleRepository = cachedArticleRepository;
+        this.poolWarmer = poolWarmer;
     }
 
     /** 人気順の一覧。 */
@@ -286,59 +290,19 @@ public class CustomGenreController {
         CustomGenre genre = opt.get();
 
         int n = Math.max(1, Math.min(targetCount, 30));
-        List<String> categories = new ArrayList<>(Arrays.asList(genre.getCategoriesCsv().split("\t")));
-        Collections.shuffle(categories);
-
-        int newlyCached = 0;
-        int attempted = 0;
-        int filterRejects = 0;
-        int fetchErrors = 0;
-        final long DEADLINE_MS = System.currentTimeMillis() + 60_000;
-
-        outer:
-        for (String cat : categories) {
-            if (newlyCached >= n) break;
-            if (System.currentTimeMillis() > DEADLINE_MS) break;
-            List<String> members;
-            try {
-                members = wikipediaService.fetchCategoryMembers(cat, 100);
-            } catch (Exception e) {
-                log.warn("warm: category fetch failed '{}': {}", cat, e.getMessage());
-                continue;
-            }
-            Collections.shuffle(members);
-            for (String title : members) {
-                if (newlyCached >= n) break outer;
-                if (System.currentTimeMillis() > DEADLINE_MS) break outer;
-                if (cachedArticleRepository.existsByTitle(title)) continue;
-                attempted++;
-                try {
-                    ArticleData data = wikipediaService.fetchArticleData(title);
-                    if (filter.isAllowed(data)) {
-                        storeToCache(data, id);
-                        newlyCached++;
-                    } else {
-                        filterRejects++;
-                    }
-                } catch (Exception e) {
-                    fetchErrors++;
-                    log.debug("warm: article fetch failed '{}': {}", title, e.getMessage());
-                }
-            }
-        }
-
+        CommunityGenrePoolWarmer.WarmResult r = poolWarmer.warmGenre(genre, n, 60_000);
         long totalCached = cachedArticleRepository.countByCommunityGenreId(id);
         log.info("warm community id={}: newly={}, attempted={}, filterRejects={}, fetchErrors={}, total={}",
-            id, newlyCached, attempted, filterRejects, fetchErrors, totalCached);
+            id, r.newlyCached(), r.attempted(), r.filterRejects(), r.fetchErrors(), totalCached);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("communityGenreId", id);
         result.put("genreName", genre.getName());
         result.put("targetCount", n);
-        result.put("newlyCached", newlyCached);
-        result.put("attempted", attempted);
-        result.put("filterRejects", filterRejects);
-        result.put("fetchErrors", fetchErrors);
+        result.put("newlyCached", r.newlyCached());
+        result.put("attempted", r.attempted());
+        result.put("filterRejects", r.filterRejects());
+        result.put("fetchErrors", r.fetchErrors());
         result.put("totalCached", totalCached);
         return ResponseEntity.ok(result);
     }
