@@ -187,14 +187,14 @@ public class CustomGenreController {
             }
         }
 
-        // (2) Wikipedia フォールバック (15 秒以内に諦める)
+        // (2) Wikipedia フォールバック (20 秒以内に諦める)
         //     キャッシュが空、または exclude で全弾打ち尽くした場合に走る
         List<String> categories = new ArrayList<>(Arrays.asList(genre.getCategoriesCsv().split("\t")));
         Collections.shuffle(categories);
         ArticleData firstFound = null;
         int totalFetched = 0;
-        final int MAX_FETCHES = 20;
-        final long DEADLINE_MS = System.currentTimeMillis() + 15_000;
+        final int MAX_FETCHES = 30;
+        final long DEADLINE_MS = System.currentTimeMillis() + 20_000;
         java.util.Set<String> excludeSet = excludeTitles == null
             ? java.util.Collections.emptySet()
             : new java.util.HashSet<>(excludeTitles);
@@ -235,6 +235,25 @@ public class CustomGenreController {
             // playCount は記事 1 件ごとには加算しない (POST /{id}/play で別カウント)
             return ResponseEntity.ok(firstFound);
         }
+
+        // (3) 最後の手段: exclude を無視してでもキャッシュから返す。
+        //     プールが極端に小さいコミュニティジャンルで、Wikipedia 取得も間に合わなかったとき、
+        //     503 を返すよりは同じ記事を出題する方が UX 上マシ。
+        if (excludeTitles != null && !excludeTitles.isEmpty()) {
+            Optional<CachedArticle> anyCached = cachedArticleRepository.findRandomByCommunityGenreId(id);
+            if (anyCached.isPresent()) {
+                CachedArticle c = anyCached.get();
+                c.setLastUsedAt(Instant.now());
+                try {
+                    ArticleData data = objectMapper.readValue(c.getDataJson(), ArticleData.class);
+                    log.info("community random for id={}: falling back to duplicate (pool exhausted)", id);
+                    return ResponseEntity.ok(data);
+                } catch (JsonProcessingException e) {
+                    log.warn("failed to deserialize last-resort cached article id={}: {}", c.getId(), e.getMessage());
+                }
+            }
+        }
+
         return ResponseEntity.status(503).build();
     }
 
