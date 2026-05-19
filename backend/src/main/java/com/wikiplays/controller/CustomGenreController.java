@@ -33,7 +33,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -255,6 +257,90 @@ public class CustomGenreController {
         }
 
         return ResponseEntity.status(503).build();
+    }
+
+    /**
+     * 管理者用: コミュニティジャンルのキャッシュを Wikipedia から温める。
+     * カテゴリ → メンバー記事 を巡回し、未キャッシュかつフィルタ通過のものを最大 n 件保存する。
+     *
+     * 呼び出し例:
+     *   curl -X POST -H "Authorization: Bearer <ADMIN_JWT>" \
+     *     "https://wikiplays.me/api/community-genres/22/warm?n=20"
+     *
+     * 1 回の呼び出しに最大 60 秒かかる場合がある。必要なら複数回叩いてプールを育てる。
+     */
+    @PostMapping("/{id}/warm")
+    public ResponseEntity<Map<String, Object>> warmCache(
+        @PathVariable("id") Long id,
+        @RequestParam(name = "n", defaultValue = "10") int targetCount,
+        Authentication auth
+    ) {
+        if (auth == null || !(auth.getPrincipal() instanceof User user)) {
+            return ResponseEntity.status(401).build();
+        }
+        if (!"ADMIN".equals(user.getRole())) {
+            return ResponseEntity.status(403).build();
+        }
+        Optional<CustomGenre> opt = repository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        CustomGenre genre = opt.get();
+
+        int n = Math.max(1, Math.min(targetCount, 30));
+        List<String> categories = new ArrayList<>(Arrays.asList(genre.getCategoriesCsv().split("\t")));
+        Collections.shuffle(categories);
+
+        int newlyCached = 0;
+        int attempted = 0;
+        int filterRejects = 0;
+        int fetchErrors = 0;
+        final long DEADLINE_MS = System.currentTimeMillis() + 60_000;
+
+        outer:
+        for (String cat : categories) {
+            if (newlyCached >= n) break;
+            if (System.currentTimeMillis() > DEADLINE_MS) break;
+            List<String> members;
+            try {
+                members = wikipediaService.fetchCategoryMembers(cat, 100);
+            } catch (Exception e) {
+                log.warn("warm: category fetch failed '{}': {}", cat, e.getMessage());
+                continue;
+            }
+            Collections.shuffle(members);
+            for (String title : members) {
+                if (newlyCached >= n) break outer;
+                if (System.currentTimeMillis() > DEADLINE_MS) break outer;
+                if (cachedArticleRepository.existsByTitle(title)) continue;
+                attempted++;
+                try {
+                    ArticleData data = wikipediaService.fetchArticleData(title);
+                    if (filter.isAllowed(data)) {
+                        storeToCache(data, id);
+                        newlyCached++;
+                    } else {
+                        filterRejects++;
+                    }
+                } catch (Exception e) {
+                    fetchErrors++;
+                    log.debug("warm: article fetch failed '{}': {}", title, e.getMessage());
+                }
+            }
+        }
+
+        long totalCached = cachedArticleRepository.countByCommunityGenreId(id);
+        log.info("warm community id={}: newly={}, attempted={}, filterRejects={}, fetchErrors={}, total={}",
+            id, newlyCached, attempted, filterRejects, fetchErrors, totalCached);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("communityGenreId", id);
+        result.put("genreName", genre.getName());
+        result.put("targetCount", n);
+        result.put("newlyCached", newlyCached);
+        result.put("attempted", attempted);
+        result.put("filterRejects", filterRejects);
+        result.put("fetchErrors", fetchErrors);
+        result.put("totalCached", totalCached);
+        return ResponseEntity.ok(result);
     }
 
     /**
