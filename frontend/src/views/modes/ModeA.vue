@@ -510,7 +510,12 @@ onMounted(refreshQuota)
       <div v-else-if="error" class="text-red-600">エラー: {{ error }}</div>
 
       <div v-else-if="article" class="space-y-4">
-        <article class="bg-white border border-slate-200 rounded p-4 leading-relaxed text-sm min-h-32 space-y-3 max-h-[50vh] overflow-y-auto">
+        <article
+          class="no-copy bg-white border border-slate-200 rounded p-4 leading-relaxed text-sm min-h-32 space-y-3 max-h-[50vh] overflow-y-auto"
+          @copy.prevent
+          @cut.prevent
+          @contextmenu.prevent
+          @dragstart.prevent>
           <p v-if="revealed < paragraphs.length" class="text-slate-300 text-center">… (前段落は未開示)</p>
           <p v-for="(p, i) in visibleParagraphs" :key="i" class="whitespace-pre-wrap">{{ p }}</p>
         </article>

@@ -304,7 +304,7 @@ function copyShare() { navigator.clipboard.writeText(shareText.value) }
         </div>
 
         <!-- 開示された情報 -->
-        <div class="space-y-2">
+        <div class="no-copy space-y-2" @copy.prevent @cut.prevent @contextmenu.prevent @dragstart.prevent>
           <div v-if="opened.has('charCount')" class="bg-amber-50 border border-amber-200 rounded p-3 text-sm">
             <div class="text-xs text-amber-700 font-bold mb-1">答えの文字数</div>
             <div class="text-lg font-bold">{{ answerCoreLength }} 文字</div>

@@ -221,7 +221,12 @@ function copyShare() { navigator.clipboard.writeText(shareText.value) }
       <div v-else-if="error" class="text-red-600">エラー: {{ error }}</div>
 
       <div v-else-if="article" class="space-y-4">
-        <article class="bg-white border border-slate-200 rounded p-3 text-sm leading-relaxed">
+        <article
+          class="no-copy bg-white border border-slate-200 rounded p-3 text-sm leading-relaxed"
+          @copy.prevent
+          @cut.prevent
+          @contextmenu.prevent
+          @dragstart.prevent>
           {{ maskText(firstSentence(article.introExtract), article.title) }}
         </article>
 

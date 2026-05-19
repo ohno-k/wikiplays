@@ -208,11 +208,16 @@ function yearLabel(y: number): string {
       <div v-else-if="error" class="text-red-600">エラー: {{ error }}</div>
 
       <div v-else-if="article" class="space-y-4">
-        <article class="bg-white border border-slate-200 rounded p-4 leading-relaxed whitespace-pre-wrap text-sm max-h-60 overflow-y-auto">
+        <article
+          class="no-copy bg-white border border-slate-200 rounded p-4 leading-relaxed whitespace-pre-wrap text-sm max-h-60 overflow-y-auto"
+          @copy.prevent
+          @cut.prevent
+          @contextmenu.prevent
+          @dragstart.prevent>
           {{ maskedIntro(article) }}
         </article>
 
-        <div v-if="safeCategories(article).length" class="text-xs text-slate-500">
+        <div v-if="safeCategories(article).length" class="no-copy text-xs text-slate-500" @copy.prevent @cut.prevent @contextmenu.prevent @dragstart.prevent>
           <span class="font-bold">カテゴリ:</span>
           <span v-for="c in safeCategories(article)" :key="c" class="inline-block px-2 py-0.5 mx-1 bg-slate-100 rounded">{{ c }}</span>
         </div>

@@ -67,6 +67,14 @@
   .theme-border {
     border-color: rgb(var(--theme-color) / 0.3);
   }
+
+  /* 問題文のコピー防止 (検索エンジン等への貼り付け抑止) */
+  .no-copy {
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
 }
 
 /* スクロールバーの装飾 */
