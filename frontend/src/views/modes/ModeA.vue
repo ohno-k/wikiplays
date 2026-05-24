@@ -538,7 +538,7 @@ onMounted(refreshQuota)
     <div v-else>
       <div class="text-sm text-slate-500 mb-2 flex justify-between items-center">
         <span>第 {{ currentQ }} 問 / {{ TOTAL_QUESTIONS }} 問</span>
-        <span>{{ revealed }} / {{ paragraphs.length }} 段落</span>
+        <span v-if="!error && paragraphs.length > 0">{{ revealed }} / {{ paragraphs.length }} 段落</span>
       </div>
 
       <!-- 視覚的プログレスバー (難易度で速度可変) -->
@@ -549,7 +549,12 @@ onMounted(refreshQuota)
       </div>
 
       <div v-if="loading" class="text-slate-500">読み込み中…</div>
-      <div v-else-if="error" class="text-red-600">エラー: {{ error }}</div>
+      <div v-else-if="error" class="space-y-3">
+        <div class="text-red-600">エラー: {{ error }}</div>
+        <button @click="loadNext" class="px-3 py-1 bg-slate-200 rounded hover:bg-slate-300 text-xs">
+          もう一度試す
+        </button>
+      </div>
 
       <div v-else-if="article" class="space-y-4">
         <article

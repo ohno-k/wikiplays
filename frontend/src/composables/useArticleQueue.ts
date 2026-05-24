@@ -48,11 +48,18 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
     let lastTitleSkips = 0
     // 重複スキップで諦めた候補 (プール枯渇時のフォールバック用)
     let duplicateFallback: T | null = null
+    // この findOne 内で取得したが prepare に弾かれたタイトル。
+    // サーバーが同じ記事を返し続けないよう、後続リクエストの exclude に混ぜる。
+    // (seenTitles には出題確定時しか入らないため、prepare 落ちの記事はサーバー側で除外されない)
+    const localRejects = new Set<string>()
     while (attempts < maxAttempts) {
       try {
         const communityId = options.communityGenreId?.value
+        const excludeTitles = communityId != null
+          ? Array.from(new Set([...seenTitles, ...localRejects]))
+          : undefined
         const a = communityId != null
-          ? await fetchCommunityRandomArticle(communityId, options.token?.value, Array.from(seenTitles))
+          ? await fetchCommunityRandomArticle(communityId, options.token?.value, excludeTitles)
           : await fetchRandomArticle(options.genre?.value, options.scope?.value)
         // 直前の記事と同一なら最大試行の半分まで強制スキップ (back-to-back 防止)
         if (a.title === lastTitle && lastTitleSkips < Math.floor(maxAttempts / 2)) {
@@ -79,6 +86,7 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
           return prepared
         }
         prepareRejects++
+        localRejects.add(a.title)
       } catch (e) {
         lastFetchError = e
         console.warn('[useArticleQueue] fetch failed:', e)
