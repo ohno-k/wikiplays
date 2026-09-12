@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import ModeLayout from './ModeLayout.vue'
 import GenrePicker from '../../components/GenrePicker.vue'
 import CurrentGenreBadge from '../../components/CurrentGenreBadge.vue'
@@ -8,15 +8,20 @@ import { YEAR_KIND_LABELS } from '../../types'
 import { scoreEmoji } from '../../scoring'
 import { maskTitle, maskYears } from '../../masking'
 import { useArticleQueue } from '../../composables/useArticleQueue'
+import { useSessionRecorder } from '../../composables/useSessionRecorder'
+import { useAuth } from '../../composables/useAuth'
+import XpResultCard from '../../components/XpResultCard.vue'
+import ResultShareCard from '../../components/ResultShareCard.vue'
 
 const MIN_YEAR = -500
-const MAX_YEAR = 2025
+const MAX_YEAR = new Date().getFullYear()
 const ROUGH_STEP = 25                  // 粗いスライダーの刻み
 const FINE_RANGE = 200                 // ズーム後の半径 (粗推測 ±200 年)
 const MAX_SCORE = 1000
 const DECAY_RANGE = 100                // 誤差 100 年で 0 点
 
 const TOTAL_QUESTIONS = 5
+const MAX_TOTAL = MAX_SCORE * TOTAL_QUESTIONS
 
 type Phase = 'rough' | 'fine' | 'answered'
 
@@ -43,7 +48,7 @@ const fineMin = computed(() => Math.max(MIN_YEAR, roughGuess.value - FINE_RANGE)
 const fineMax = computed(() => Math.min(MAX_YEAR, roughGuess.value + FINE_RANGE))
 
 function maskedIntro(a: ArticleData): string {
-  return maskYears(maskTitle(a.introExtract, a.title))
+  return maskYears(maskTitle(a.introExtract, a.title, a.aliases ?? []))
 }
 
 function safeCategories(a: ArticleData): string[] {
@@ -54,9 +59,13 @@ const selectedGenre = ref<Genre | null>(null)
 const selectedScope = ref<Scope>('jp')
 const started = ref(false)
 
+const { token, isLoggedIn } = useAuth()
+const recorder = useSessionRecorder('c')
+
 const queue = useArticleQueue<ArticleData>({
   genre: selectedGenre,
   scope: selectedScope,
+  token,
   prepare: (a) => {
     if (a.extractedYear === null || a.extractedYearKind === null) return null
     if (a.introExtract.length < 100) return null
@@ -132,6 +141,7 @@ function nextQuestion() {
 function restart() {
   results.value = []
   currentQ.value = 1
+  recorder.reset()
   queue.reset()
   loadNext()
 }
@@ -141,9 +151,11 @@ const shareText = computed(() => {
   return `Wikiplays Cモード ${totalScore.value}/${MAX_SCORE * TOTAL_QUESTIONS}\n${emojis}`
 })
 
-function copyShare() {
-  navigator.clipboard.writeText(shareText.value)
-}
+watch(finished, (v) => {
+  if (!v) return
+  recorder.record({ genre: selectedGenre.value, scope: selectedScope.value, score: totalScore.value, maxScore: MAX_TOTAL })
+})
+
 
 function yearLabel(y: number): string {
   return y < 0 ? `紀元前 ${-y} 年` : `${y} 年`
@@ -152,7 +164,7 @@ function yearLabel(y: number): string {
 </script>
 
 <template>
-  <ModeLayout mode-name="座標推定型" short-name="C モード" emoji="🎯" theme="emerald" gradient="from-emerald-500 to-teal-600">
+  <ModeLayout mode-name="年代あて" short-name="C モード" emoji="🎯" theme="emerald" gradient="from-emerald-500 to-teal-600">
     <GenrePicker
       v-if="!started"
       mode-name="C モード"
@@ -193,11 +205,19 @@ function yearLabel(y: number): string {
           </div>
         </div>
       </div>
-      <div class="flex gap-2">
-        <button @click="restart" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">もう一度</button>
-        <button @click="copyShare" class="px-4 py-2 bg-slate-200 rounded hover:bg-slate-300">結果をコピー</button>
+      <XpResultCard v-if="recorder.xpResult.value" :xp="recorder.xpResult.value" />
+      <div v-else-if="!isLoggedIn" class="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded p-3">
+        ログインすると XP とレベルが貯まり、ランキングに参加できます。
+        <router-link to="/login" class="text-blue-600 hover:underline ml-1">ログイン / 登録</router-link>
       </div>
-      <pre class="text-xs bg-slate-100 p-3 rounded whitespace-pre-wrap">{{ shareText }}</pre>
+      <ResultShareCard
+        title="C モード"
+        :total-score="totalScore"
+        :max-score="MAX_TOTAL"
+        :results="results"
+        theme-gradient="from-emerald-500 via-teal-500 to-cyan-600"
+        :share-text="shareText" />
+      <button @click="restart" class="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">もう一度</button>
     </div>
 
     <!-- 問題中 -->
@@ -205,7 +225,15 @@ function yearLabel(y: number): string {
       <div class="text-sm text-slate-500 mb-2">第 {{ currentQ }} 問 / {{ TOTAL_QUESTIONS }} 問</div>
 
       <div v-if="loading" class="text-slate-500">読み込み中…</div>
-      <div v-else-if="error" class="text-red-600">エラー: {{ error }}</div>
+      <div v-else-if="error" class="space-y-2">
+        <div class="text-red-600">エラー: {{ error }}</div>
+        <div v-if="error.includes('上限')" class="text-sm text-slate-600">
+          フリープランは通常モード合計で 1 日 5 セッションまでです。
+          <router-link to="/daily" class="text-blue-600 hover:underline">デイリーチャレンジ</router-link> は上限に関係なく挑戦できます。
+          <router-link to="/account" class="text-blue-600 hover:underline ml-1">⭐ プレミアムで無制限に</router-link>
+        </div>
+        <button v-else @click="loadNext" class="px-3 py-1 bg-slate-200 rounded hover:bg-slate-300 text-xs">もう一度試す</button>
+      </div>
 
       <div v-else-if="article" class="space-y-4">
         <article
@@ -236,7 +264,7 @@ function yearLabel(y: number): string {
           <div class="flex justify-between text-xs text-slate-500">
             <span>紀元前500年</span>
             <span>{{ ROUGH_STEP }}年刻み</span>
-            <span>2025年</span>
+            <span>{{ MAX_YEAR }}年</span>
           </div>
           <button @click="confirmRough" class="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
             この時代で決定 → 細かく合わせる

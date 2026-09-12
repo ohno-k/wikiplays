@@ -23,7 +23,7 @@ const CONTACT_EMAIL = 'wikiplays416@gmail.com'
         Web ゲームです。固有名詞や年代がマスクされた記事を読み解き、推理しながら答えを導きます。
       </p>
       <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
-        <li>5 種類のゲームモード (メインは A モード: 段階開示型)</li>
+        <li>5 種類のゲームモード (メインは A モード: じわじわ開示)</li>
         <li>20 ジャンル × 日本/世界スコープで選択可能</li>
         <li>毎日 1 回のデイリーチャレンジ (全プレイヤー共通の問題)</li>
         <li>累計スコアによるランキング機能</li>

@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { levelTitle } from '../scoring'
 
 const route = useRoute()
 const router = useRouter()
@@ -175,7 +176,11 @@ const xpPercent = computed(() => {
     <div v-if="user.level != null" class="glass-card p-5 space-y-3">
       <div class="flex items-baseline justify-between">
         <div class="text-xs font-mono text-slate-500">EXPERIENCE</div>
-        <div class="text-xs text-slate-400">累計 {{ user.xp ?? 0 }} XP</div>
+        <div class="text-xs text-slate-400">
+          称号: <span class="font-bold text-slate-600">{{ levelTitle(user.level) }}</span>
+          ・ 累計 {{ user.xp ?? 0 }} XP
+          <span v-if="user.streakDays" class="ml-2 text-orange-500 font-bold">🔥 {{ user.streakDays }} 日連続</span>
+        </div>
       </div>
       <div class="flex items-center gap-3">
         <span class="inline-flex items-center justify-center w-12 h-12 rounded-full

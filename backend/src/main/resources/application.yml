@@ -40,7 +40,8 @@ server:
 
 wikiplays:
   jwt:
-    secret: ${JWT_SECRET:please-change-this-very-long-jwt-secret-for-production-only}
+    # 本番では必須 (未設定なら起動失敗)。local プロファイルのみ開発用の固定値にフォールバックする。
+    secret: ${JWT_SECRET:}
     expiration-ms: 2592000000  # 30 日
   stripe:
     secret-key: ${STRIPE_SECRET_KEY:}
@@ -52,6 +53,14 @@ wikiplays:
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   mail:
     from: ${MAIL_FROM:no-reply@wikiplays.me}
+  wikipedia:
+    connect-timeout-ms: 5000
+    response-timeout-ms: 15000
+  seed:
+    # 運営が投入する架空ユーザー (ランキング・デイリーを賑やかに見せる)。false で新規投入と日次活動を停止。
+    dummy-users:
+      enabled: ${WIKIPLAYS_DUMMY_USERS_ENABLED:true}
+      count: 100
   cors:
     # 本番では環境変数 WIKIPLAYS_ALLOWED_ORIGINS で上書き
     # 例: "https://wikiplays.me,https://www.wikiplays.me"

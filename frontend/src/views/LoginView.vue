@@ -4,10 +4,11 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { getPlayerId } from '../api'
 
+const props = defineProps<{ initialMode?: 'login' | 'register' }>()
 const router = useRouter()
 const { login, register } = useAuth()
 
-const mode = ref<'login' | 'register'>('login')
+const mode = ref<'login' | 'register'>(props.initialMode ?? 'login')
 const email = ref('')
 const password = ref('')
 const displayName = ref('')

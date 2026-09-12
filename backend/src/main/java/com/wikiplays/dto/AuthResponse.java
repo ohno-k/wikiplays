@@ -14,6 +14,7 @@ public record AuthResponse(
         long xp,
         int level,
         long xpIntoLevel,
-        long xpForNextLevel
+        long xpForNextLevel,
+        int streakDays
     ) {}
 }

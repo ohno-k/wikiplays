@@ -2,13 +2,22 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { GENRES, SCOPE_LABELS, type Genre, type Scope } from '../types'
+
+function label(entry: ArchiveEntry): string {
+  if (!entry.genre) return '🎲 総合'
+  const meta = GENRES.find(g => g.id === (entry.genre as Genre))
+  const scope = entry.scope ? SCOPE_LABELS[entry.scope as Scope] : null
+  return `${meta?.emoji ?? ''} ${scope ? scope.name + 'の' : ''}${meta?.name ?? entry.genre}`
+}
 
 interface ArchiveEntry {
   id: number
   date: string
   scope: string
   genre: string
-  titles: string[]
+  questionCount: number
+  played: boolean
 }
 
 const router = useRouter()
@@ -90,11 +99,10 @@ onMounted(load)
         <div class="flex items-center justify-between">
           <div>
             <div class="text-xs font-mono text-slate-500">{{ entry.date }}</div>
-            <div class="font-bold mt-0.5">
-              {{ entry.scope || '総合' }} / {{ entry.genre || 'おまかせ' }}
-            </div>
+            <div class="font-bold mt-0.5">{{ label(entry) }}</div>
             <div class="text-xs text-slate-500 mt-1">
-              {{ entry.titles.length }} 問
+              {{ entry.questionCount }} 問
+              <span v-if="entry.played" class="ml-2 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">挑戦済み</span>
             </div>
           </div>
           <div class="text-slate-400">→</div>

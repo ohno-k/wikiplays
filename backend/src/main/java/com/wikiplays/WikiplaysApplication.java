@@ -18,6 +18,9 @@ public class WikiplaysApplication {
     @Autowired
     private ArticlePoolService articlePoolService;
 
+    @org.springframework.beans.factory.annotation.Value("${wikiplays.pool.initial-populate:true}")
+    private boolean initialPopulate;
+
     public static void main(String[] args) {
         SpringApplication.run(WikiplaysApplication.class, args);
     }
@@ -26,6 +29,6 @@ public class WikiplaysApplication {
     @EventListener(ApplicationReadyEvent.class)
     @Async
     public void warmUpPool() {
-        articlePoolService.initialPopulate();
+        if (initialPopulate) articlePoolService.initialPopulate();
     }
 }

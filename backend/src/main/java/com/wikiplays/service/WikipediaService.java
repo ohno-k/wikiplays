@@ -89,7 +89,9 @@ public class WikipediaService {
             .uri(uri -> uri.path("/w/api.php")
                 .queryParam("action", "query")
                 .queryParam("format", "json")
-                .queryParam("prop", "extracts|images|categories|langlinks|info")
+                .queryParam("prop", "extracts|images|categories|langlinks|info|redirects")
+                .queryParam("rdlimit", "max")
+                .queryParam("rdnamespace", 0)
                 .queryParam("explaintext", 1)
                 .queryParam("exsectionformat", "plain")
                 .queryParam("imlimit", 20)
@@ -129,10 +131,10 @@ public class WikipediaService {
 
         int languageLinkCount = page.path("langlinks").isArray() ? page.path("langlinks").size() : 0;
         int articleLength = page.path("length").asInt(0);
+        List<String> aliases = extractAliases(page, resolvedTitle);
 
         List<Section> sections = fetchSections(resolvedTitle);
         Map<String, String> infobox = fetchInfobox(resolvedTitle);
-        Integer pageViews = fetchRecentPageViews(resolvedTitle);
         ExtractedYearInfo yearInfo = extractYearInfo(infobox, introExtract);
 
         return new ArticleData(
@@ -144,11 +146,12 @@ public class WikipediaService {
             infobox,
             categories,
             languageLinkCount,
-            pageViews,
+            null, // recentPageViews: 取得コストに見合う用途が無いため廃止 (旧キャッシュ互換のため列は残す)
             articleLength,
             buildPageUrl(resolvedTitle),
             yearInfo == null ? null : yearInfo.year,
-            yearInfo == null ? null : yearInfo.kind
+            yearInfo == null ? null : yearInfo.kind,
+            aliases
         );
     }
 
@@ -218,44 +221,45 @@ public class WikipediaService {
         return result;
     }
 
-    /** Wikipedia の Pageviews REST API で直近 30 日の閲覧数合計を取得。 */
-    public Integer fetchRecentPageViews(String title) {
-        try {
-            java.time.LocalDate today = java.time.LocalDate.now();
-            String end = today.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
-            String start = today.minusDays(30).format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
-            String encoded = URLEncoder.encode(title, StandardCharsets.UTF_8);
-
-            JsonNode json = wikipediaWebClient.get()
-                .uri("https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/ja.wikipedia/all-access/all-agents/"
-                    + encoded + "/daily/" + start + "/" + end)
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block();
-
-            if (json == null) return null;
-            int total = 0;
-            for (JsonNode item : json.path("items")) total += item.path("views").asInt(0);
-            return total;
-        } catch (Exception e) {
-            return null; // 取れなければ無視
-        }
-    }
-
     public String buildPageUrl(String title) {
         return "https://ja.wikipedia.org/wiki/" + URLEncoder.encode(title, StandardCharsets.UTF_8);
     }
 
     /**
+     * カテゴリ一覧をランダムな位置から読むためのソートキー接頭辞。
+     * MediaWiki の categorymembers は常にソートキー順 (日本語版は読み仮名) で先頭から返すため、
+     * 何も指定しないと五十音の先頭にある同じ記事ばかりが選ばれてしまう。
+     */
+    static final String[] RANDOM_SORTKEY_PREFIXES = (
+        "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわ"
+        + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    ).codePoints().mapToObj(Character::toString).toArray(String[]::new);
+
+    private final java.util.Random random = new java.util.Random();
+
+    /**
      * 指定カテゴリに属する記事タイトルを最大 limit 件取得する。
+     * ランダムなソートキー位置から読み始めることで、呼ぶたびに違う記事が候補になる。
      * 記事メンバーが少ない場合は 1 段だけサブカテゴリを掘って補充する。
      */
     public List<String> fetchCategoryMembers(String category, int limit) {
         List<String> articles = new ArrayList<>();
         List<String> subcats = new ArrayList<>();
-        fetchMembersInto(category, limit, articles, subcats);
 
-        if (articles.size() >= limit) return articles.subList(0, Math.min(limit, articles.size()));
+        // ランダム接頭辞で 2 回まで試し、それでも足りなければ先頭から読む
+        for (int attempt = 0; attempt < 2 && articles.size() < limit; attempt++) {
+            String prefix = RANDOM_SORTKEY_PREFIXES[random.nextInt(RANDOM_SORTKEY_PREFIXES.length)];
+            fetchMembersInto(category, limit, prefix, articles, subcats);
+        }
+        if (articles.size() < limit) {
+            fetchMembersInto(category, limit, null, articles, subcats);
+        }
+        dedupe(articles);
+        dedupe(subcats);
+        if (articles.size() >= limit) {
+            Collections.shuffle(articles);
+            return new ArrayList<>(articles.subList(0, limit));
+        }
 
         // 不足分をサブカテゴリから補充 (1 段のみ)
         Collections.shuffle(subcats);
@@ -264,27 +268,44 @@ public class WikipediaService {
             List<String> subArticles = new ArrayList<>();
             List<String> dummySub = new ArrayList<>();
             try {
-                fetchMembersInto(sub, limit - articles.size(), subArticles, dummySub);
+                String prefix = RANDOM_SORTKEY_PREFIXES[random.nextInt(RANDOM_SORTKEY_PREFIXES.length)];
+                fetchMembersInto(sub, limit - articles.size(), prefix, subArticles, dummySub);
+                if (subArticles.isEmpty()) {
+                    fetchMembersInto(sub, limit - articles.size(), null, subArticles, dummySub);
+                }
                 articles.addAll(subArticles);
             } catch (Exception ignored) {
                 // 次のサブカテゴリで再試行
             }
         }
-        return articles.subList(0, Math.min(limit, articles.size()));
+        dedupe(articles);
+        Collections.shuffle(articles);
+        return new ArrayList<>(articles.subList(0, Math.min(limit, articles.size())));
+    }
+
+    private static void dedupe(List<String> list) {
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>(list);
+        list.clear();
+        list.addAll(set);
     }
 
     /** カテゴリの直接メンバー (記事 + サブカテゴリ) を 1 度の API 呼び出しで取得。 */
-    private void fetchMembersInto(String category, int limit, List<String> articles, List<String> subcats) {
+    private void fetchMembersInto(
+        String category, int limit, String sortkeyPrefix, List<String> articles, List<String> subcats
+    ) {
         String catTitle = category.startsWith("Category:") ? category : "Category:" + category;
         JsonNode json = wikipediaWebClient.get()
-            .uri(uri -> uri.path("/w/api.php")
-                .queryParam("action", "query")
-                .queryParam("format", "json")
-                .queryParam("list", "categorymembers")
-                .queryParam("cmtitle", catTitle)
-                .queryParam("cmtype", "page|subcat")
-                .queryParam("cmlimit", Math.min(Math.max(limit, 20), 100))
-                .build())
+            .uri(uri -> {
+                var b = uri.path("/w/api.php")
+                    .queryParam("action", "query")
+                    .queryParam("format", "json")
+                    .queryParam("list", "categorymembers")
+                    .queryParam("cmtitle", catTitle)
+                    .queryParam("cmtype", "page|subcat")
+                    .queryParam("cmlimit", Math.min(Math.max(limit, 20), 100));
+                if (sortkeyPrefix != null) b.queryParam("cmstartsortkeyprefix", sortkeyPrefix);
+                return b.build();
+            })
             .retrieve()
             .bodyToMono(JsonNode.class)
             .block();
@@ -299,25 +320,27 @@ public class WikipediaService {
         }
     }
 
-    /** 記事タイトル・別名を本文からマスクする (モード A/B などで使う)。 */
-    public String maskTitle(String content, String title) {
-        if (content == null || content.isBlank()) return content;
-        List<String> targets = new ArrayList<>();
-        targets.add(title);
-        int paren = title.indexOf('(');
-        if (paren > 0) targets.add(title.substring(0, paren).trim());
-        int parenJa = title.indexOf('（');
-        if (parenJa > 0) targets.add(title.substring(0, parenJa).trim());
-
-        String masked = content;
-        for (String t : targets) {
-            if (t == null || t.isBlank()) continue;
-            masked = masked.replace(t, "????");
-        }
-        return masked;
-    }
-
     // ----- 内部ヘルパー -----
+
+    /**
+     * prop=redirects の結果から、この記事の別名として使えるリダイレクト名を抽出する。
+     * 「○○ (曖昧さ回避)」のような括弧付き、タイトルと同じもの、1 文字のものは除外する。
+     */
+    private List<String> extractAliases(JsonNode page, String title) {
+        List<String> out = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        seen.add(title);
+        for (JsonNode r : page.path("redirects")) {
+            String t = r.path("title").asText("");
+            if (t.isBlank() || seen.contains(t)) continue;
+            // 「タイトル (曖昧さ回避語)」形式のリダイレクトは括弧を落とした形で採用
+            String core = t.replaceAll("[（(][^（()）]*[）)]", "").trim();
+            if (core.isBlank() || core.codePointCount(0, core.length()) < 2) continue;
+            if (seen.add(core)) out.add(core);
+            if (out.size() >= 30) break;
+        }
+        return out;
+    }
 
     private JsonNode firstPage(JsonNode bulk) {
         JsonNode pages = bulk.path("query").path("pages");

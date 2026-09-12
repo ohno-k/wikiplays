@@ -13,6 +13,7 @@ import com.wikiplays.repository.CachedArticleRepository;
 import com.wikiplays.repository.CustomGenreRepository;
 import com.wikiplays.repository.SubscriptionRepository;
 import com.wikiplays.service.ArticleFilter;
+import com.wikiplays.service.ArticleJson;
 import com.wikiplays.service.CommunityGenrePoolWarmer;
 import com.wikiplays.service.WikipediaService;
 import org.springframework.security.core.Authentication;
@@ -53,7 +54,7 @@ public class CustomGenreController {
     private final SubscriptionRepository subscriptionRepository;
     private final CachedArticleRepository cachedArticleRepository;
     private final CommunityGenrePoolWarmer poolWarmer;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = ArticleJson.MAPPER;
 
     public CustomGenreController(
         CustomGenreRepository repository,

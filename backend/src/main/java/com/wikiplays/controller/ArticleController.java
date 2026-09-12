@@ -1,13 +1,15 @@
 package com.wikiplays.controller;
 
 import com.wikiplays.dto.ArticleData;
+import com.wikiplays.entity.User;
 import com.wikiplays.service.ArticlePoolService;
+import com.wikiplays.service.PlayQuotaService;
 import com.wikiplays.service.WikipediaService;
+import org.springframework.security.core.Authentication;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,37 +29,36 @@ public class ArticleController {
 
     private final WikipediaService wikipediaService;
     private final ArticlePoolService articlePool;
+    private final PlayQuotaService quotaService;
 
     public ArticleController(
         WikipediaService wikipediaService,
-        ArticlePoolService articlePool
+        ArticlePoolService articlePool,
+        PlayQuotaService quotaService
     ) {
         this.wikipediaService = wikipediaService;
         this.articlePool = articlePool;
+        this.quotaService = quotaService;
     }
 
     /**
-     * フィルタ通過する記事を 1 件返す。
+     * フィルタ通過する記事を 1 件返す (B〜E モード用)。
      * まず記事プール (DB) から、ヒットしなければ Wikipedia から取得して DB に追加。
+     * Free プランの 1 日上限に達している場合は 429。
      */
     @GetMapping("/random")
-    public ResponseEntity<ArticleData> random(
+    public ResponseEntity<?> random(
         @RequestParam(value = "genre", required = false) String genre,
-        @RequestParam(value = "scope", required = false) String scope
+        @RequestParam(value = "scope", required = false) String scope,
+        @RequestParam(value = "playerId", required = false) String playerId,
+        Authentication auth
     ) {
-        Optional<ArticleData> data = articlePool.getRandom(scope, genre);
-        return data.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.status(503).build());
-    }
-
-    /** 指定タイトルの記事を取得 (デバッグ用)。 */
-    @GetMapping("/{title}")
-    public ResponseEntity<ArticleData> byTitle(@PathVariable("title") String title) {
-        try {
-            ArticleData data = wikipediaService.fetchArticleData(title);
-            return ResponseEntity.ok(data);
-        } catch (Exception e) {
-            return ResponseEntity.notFound().build();
+        User user = (auth != null && auth.getPrincipal() instanceof User u) ? u : null;
+        if (!quotaService.canPlay(user, playerId)) {
+            return ResponseEntity.status(429).body(java.util.Map.of("message", "今日のプレイ上限に達しました"));
         }
+        Optional<ArticleData> data = articlePool.getRandom(scope, genre);
+        return data.<ResponseEntity<?>>map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.status(503).build());
     }
 
     /**

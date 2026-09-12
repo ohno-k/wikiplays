@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import ModeLayout from './ModeLayout.vue'
 import GenrePicker from '../../components/GenrePicker.vue'
 import CurrentGenreBadge from '../../components/CurrentGenreBadge.vue'
 import { fetchDecoys } from '../../api'
 import type { ArticleData, Genre, Scope } from '../../types'
 import { scoreEmoji } from '../../scoring'
+import { maskTitle, firstSentence } from '../../masking'
 import { useArticleQueue } from '../../composables/useArticleQueue'
+import { useSessionRecorder } from '../../composables/useSessionRecorder'
+import { useAuth } from '../../composables/useAuth'
+import XpResultCard from '../../components/XpResultCard.vue'
+import ResultShareCard from '../../components/ResultShareCard.vue'
 
 interface ModeDData {
   article: ArticleData
@@ -14,6 +19,7 @@ interface ModeDData {
 }
 
 const TOTAL_QUESTIONS = 5
+const MAX_TOTAL = 1000 * TOTAL_QUESTIONS
 const HINTS_MAX = 3
 const SCORE_BY_HINTS = [1000, 800, 600, 400] // ヒント追加数→スコア
 
@@ -48,23 +54,6 @@ const hints = computed<Hint[]>(() => {
   ]
 })
 
-function maskText(text: string, title: string): string {
-  if (!text || !title) return text
-  let out = text.replace(new RegExp(escapeRegex(title), 'g'), '????')
-  const paren = title.split(/[（(]/)[0].trim()
-  if (paren && paren !== title) {
-    out = out.replace(new RegExp(escapeRegex(paren), 'g'), '????')
-  }
-  return out
-}
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function firstSentence(text: string): string {
-  const m = text.match(/^[^。．！？!?]*[。．！？!?]/)
-  return m ? m[0] : text.slice(0, 100)
-}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = arr.slice()
@@ -79,9 +68,13 @@ const selectedGenre = ref<Genre | null>(null)
 const selectedScope = ref<Scope>('jp')
 const started = ref(false)
 
+const { token, isLoggedIn } = useAuth()
+const recorder = useSessionRecorder('d')
+
 const queue = useArticleQueue<ModeDData>({
   genre: selectedGenre,
   scope: selectedScope,
+  token,
   prepare: async (a) => {
     if (a.categories.length === 0) return null
     try {
@@ -155,7 +148,7 @@ function submit() {
 function nextQuestion() {
   if (currentQ.value < TOTAL_QUESTIONS) { currentQ.value++; loadNext() }
 }
-function restart() { results.value = []; currentQ.value = 1; queue.reset(); loadNext() }
+function restart() { results.value = []; currentQ.value = 1; recorder.reset(); queue.reset(); loadNext() }
 
 function onGenreSelected(g: Genre | null, s: Scope) {
   selectedGenre.value = g
@@ -178,12 +171,16 @@ const shareText = computed(() => {
   const emojis = results.value.map(r => scoreEmoji(r.score, 1000)).join('')
   return `Wikiplays Dモード ${totalScore.value}/${1000 * TOTAL_QUESTIONS}\n${emojis}`
 })
-function copyShare() { navigator.clipboard.writeText(shareText.value) }
+watch(finished, (v) => {
+  if (!v) return
+  recorder.record({ genre: selectedGenre.value, scope: selectedScope.value, score: totalScore.value, maxScore: MAX_TOTAL })
+})
+
 
 </script>
 
 <template>
-  <ModeLayout mode-name="消去法型" short-name="D モード" emoji="🔍" theme="amber" gradient="from-amber-500 to-orange-600">
+  <ModeLayout mode-name="4 択クイズ" short-name="D モード" emoji="🔍" theme="amber" gradient="from-amber-500 to-orange-600">
     <GenrePicker
       v-if="!started"
       mode-name="D モード"
@@ -208,17 +205,33 @@ function copyShare() { navigator.clipboard.writeText(shareText.value) }
           <span class="text-slate-600">{{ r.correct ? `ヒント ${r.hintsUsed} で正解` : '不正解' }} → {{ r.score }}点</span>
         </div>
       </div>
-      <div class="flex gap-2">
-        <button @click="restart" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">もう一度</button>
-        <button @click="copyShare" class="px-4 py-2 bg-slate-200 rounded hover:bg-slate-300">結果をコピー</button>
+      <XpResultCard v-if="recorder.xpResult.value" :xp="recorder.xpResult.value" />
+      <div v-else-if="!isLoggedIn" class="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded p-3">
+        ログインすると XP とレベルが貯まり、ランキングに参加できます。
+        <router-link to="/login" class="text-blue-600 hover:underline ml-1">ログイン / 登録</router-link>
       </div>
-      <pre class="text-xs bg-slate-100 p-3 rounded whitespace-pre-wrap">{{ shareText }}</pre>
+      <ResultShareCard
+        title="D モード"
+        :total-score="totalScore"
+        :max-score="MAX_TOTAL"
+        :results="results"
+        theme-gradient="from-amber-500 via-orange-500 to-red-500"
+        :share-text="shareText" />
+      <button @click="restart" class="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">もう一度</button>
     </div>
 
     <div v-else>
       <div class="text-sm text-slate-500 mb-2">第 {{ currentQ }} 問 / {{ TOTAL_QUESTIONS }} 問 / ヒント {{ hintsOpened.size }}/{{ HINTS_MAX }}</div>
       <div v-if="loading" class="text-slate-500">読み込み中…</div>
-      <div v-else-if="error" class="text-red-600">エラー: {{ error }}</div>
+      <div v-else-if="error" class="space-y-2">
+        <div class="text-red-600">エラー: {{ error }}</div>
+        <div v-if="error.includes('上限')" class="text-sm text-slate-600">
+          フリープランは通常モード合計で 1 日 5 セッションまでです。
+          <router-link to="/daily" class="text-blue-600 hover:underline">デイリーチャレンジ</router-link> は上限に関係なく挑戦できます。
+          <router-link to="/account" class="text-blue-600 hover:underline ml-1">⭐ プレミアムで無制限に</router-link>
+        </div>
+        <button v-else @click="loadNext" class="px-3 py-1 bg-slate-200 rounded hover:bg-slate-300 text-xs">もう一度試す</button>
+      </div>
 
       <div v-else-if="article" class="space-y-4">
         <article
@@ -227,7 +240,7 @@ function copyShare() { navigator.clipboard.writeText(shareText.value) }
           @cut.prevent
           @contextmenu.prevent
           @dragstart.prevent>
-          {{ maskText(firstSentence(article.introExtract), article.title) }}
+          {{ maskTitle(firstSentence(article.introExtract), article.title, article.aliases ?? []) }}
         </article>
 
         <!-- ヒント -->

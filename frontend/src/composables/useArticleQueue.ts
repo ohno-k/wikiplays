@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue'
 import type { ArticleData, Genre, Scope } from '../types'
-import { fetchRandomArticle, fetchCommunityRandomArticle } from '../api'
+import { fetchRandomArticle, fetchCommunityRandomArticle, QuotaExceededError } from '../api'
 
 /**
  * 各モード用に「次の問題」を裏で 1 件先読みするキュー。
@@ -26,7 +26,7 @@ export interface ArticleQueueOptions<T> {
   scope?: Ref<Scope>
   /** コミュニティジャンル ID。指定されたら通常ジャンルより優先。 */
   communityGenreId?: Ref<number | null>
-  /** コミュニティジャンルプレイ時の JWT (Premium 検証用)。 */
+  /** ログイン中の JWT (Premium 検証・Free 上限判定用)。 */
   token?: Ref<string | null>
 }
 
@@ -60,7 +60,7 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
           : undefined
         const a = communityId != null
           ? await fetchCommunityRandomArticle(communityId, options.token?.value, excludeTitles)
-          : await fetchRandomArticle(options.genre?.value, options.scope?.value)
+          : await fetchRandomArticle(options.genre?.value, options.scope?.value, options.token?.value)
         // 直前の記事と同一なら最大試行の半分まで強制スキップ (back-to-back 防止)
         if (a.title === lastTitle && lastTitleSkips < Math.floor(maxAttempts / 2)) {
           lastTitleSkips++
@@ -88,6 +88,8 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
         prepareRejects++
         localRejects.add(a.title)
       } catch (e) {
+        // Free プランの上限に達したら再試行しても無駄なので即座に伝える
+        if (e instanceof QuotaExceededError) throw e
         lastFetchError = e
         console.warn('[useArticleQueue] fetch failed:', e)
       }

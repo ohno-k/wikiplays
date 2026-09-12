@@ -3,7 +3,7 @@ import { MODES } from '../types'
 import AdSlot from '../components/AdSlot.vue'
 import { useAuth } from '../composables/useAuth'
 
-const { isLoggedIn } = useAuth()
+const { isLoggedIn, user } = useAuth()
 </script>
 
 <template>
@@ -17,9 +17,22 @@ const { isLoggedIn } = useAuth()
         <span class="brand-text">Wikiplays</span>
       </h1>
       <p class="text-slate-600 max-w-xl mx-auto leading-relaxed">
-        Wikipedia の記事から主題を当てるクイズゲーム。<br class="hidden sm:block" />
-        お好きな遊び方で挑戦しましょう。
+        マスクされた記事を読んで「これは何の記事?」を当てるクイズ。<br class="hidden sm:block" />
+        早く気づくほど高得点。まずは 1 セッション遊んでみてください。
       </p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+        <router-link to="/mode/a?quick=1"
+          class="inline-flex items-center gap-2 px-7 py-3 rounded-full brand-gradient text-white font-bold text-lg shadow-glow-blue hover:scale-105 transition-transform">
+          ▶ 今すぐ遊ぶ
+          <span class="text-xs font-normal opacity-80">(総合・5 問)</span>
+        </router-link>
+        <router-link to="/rules" class="text-sm text-slate-500 hover:text-slate-700 hover:underline">
+          📖 遊び方を見る
+        </router-link>
+      </div>
+      <div v-if="isLoggedIn && user?.streakDays" class="text-sm text-orange-600 font-bold">
+        🔥 {{ user.streakDays }} 日連続プレイ中! 今日も遊んで記録を伸ばそう
+      </div>
     </div>
 
     <!-- デイリー + ランキング + コミュニティジャンルへのリンク -->

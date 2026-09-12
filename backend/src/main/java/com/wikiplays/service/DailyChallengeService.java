@@ -3,7 +3,6 @@ package com.wikiplays.service;
 import com.wikiplays.dto.ArticleData;
 import com.wikiplays.dto.DailyChallengeResponse;
 import com.wikiplays.dto.DailyLeaderboardEntry;
-import com.wikiplays.dto.DailyScoreSubmit;
 import com.wikiplays.entity.DailyChallenge;
 import com.wikiplays.entity.DailyScore;
 import com.wikiplays.repository.DailyChallengeRepository;
@@ -46,20 +45,43 @@ public class DailyChallengeService {
         this.articlePool = articlePool;
     }
 
-    /** 今日のデイリーチャレンジを取得 (なければ作成)。
-     *  playerId が指定されていれば、その人の今日のスコア (既プレイなら) を myScore に含める。 */
+    public LocalDate today() {
+        return LocalDate.now(TZ);
+    }
+
+    /** 今日の (scope, genre) チャレンジのエンティティを取得 (なければ生成)。 */
     @Transactional
-    public Optional<DailyChallengeResponse> getToday(String scope, String genre, String playerId) {
+    public Optional<DailyChallenge> getOrCreateToday(String scope, String genre) {
         LocalDate today = LocalDate.now(TZ);
         String scopeKey = nullToEmpty(normalize(scope));
         String genreKey = nullToEmpty(normalize(genre));
-
         DailyChallenge challenge = challengeRepo
             .findByDateAndScopeKeyAndGenreKey(today, scopeKey, genreKey)
             .orElseGet(() -> generateNew(today, scopeKey, genreKey));
+        return Optional.ofNullable(challenge);
+    }
 
-        if (challenge == null) return Optional.empty();
-        return Optional.of(toResponse(challenge, playerId));
+    /** 今日のデイリーチャレンジの概要を取得 (なければ作成)。記事本文は含めない。
+     *  playerId が指定されていれば、その人の今日のスコア (既プレイなら) を myScore に含める。 */
+    @Transactional
+    public Optional<DailyChallengeResponse> getToday(String scope, String genre, String playerId) {
+        return getOrCreateToday(scope, genre).map(c -> toResponse(c, playerId));
+    }
+
+    /** チャレンジ ID から概要を取得 (アーカイブ用)。 */
+    @Transactional
+    public Optional<DailyChallengeResponse> getById(Long id, String playerId) {
+        return challengeRepo.findById(id).map(c -> toResponse(c, playerId));
+    }
+
+    /** チャレンジの出題記事 (プールから復元)。 */
+    @Transactional
+    public List<ArticleData> articlesOf(DailyChallenge challenge) {
+        List<ArticleData> articles = new ArrayList<>();
+        for (String t : splitCsv(challenge.getArticleTitlesCsv())) {
+            articlePool.findByTitle(t).ifPresent(articles::add);
+        }
+        return articles;
     }
 
     private DailyChallenge generateNew(LocalDate date, String scopeKey, String genreKey) {
@@ -93,11 +115,7 @@ public class DailyChallengeService {
     }
 
     private DailyChallengeResponse toResponse(DailyChallenge challenge, String playerId) {
-        List<String> titles = splitCsv(challenge.getArticleTitlesCsv());
-        List<ArticleData> articles = new ArrayList<>();
-        for (String t : titles) {
-            articlePool.findByTitle(t).ifPresent(articles::add);
-        }
+        int questionCount = splitCsv(challenge.getArticleTitlesCsv()).size();
         long playerCount = scoreRepo.countByDailyChallengeId(challenge.getId());
         int top = scoreRepo
             .findByDailyChallengeIdOrderByScoreDescPlayedAtAsc(challenge.getId(), PageRequest.of(0, 1))
@@ -114,28 +132,34 @@ public class DailyChallengeService {
             challenge.getDate(),
             challenge.getScopeKey().isEmpty() ? null : challenge.getScopeKey(),
             challenge.getGenreKey().isEmpty() ? null : challenge.getGenreKey(),
-            articles,
+            questionCount,
             playerCount,
             top,
             myScore
         );
     }
 
-    /** スコアを記録 (同じ playerId は 1 日 1 回まで)。 */
+    /** 既にこのチャレンジをプレイ済みか。 */
+    public boolean hasPlayed(Long challengeId, String playerId) {
+        return scoreRepo.findFirstByDailyChallengeIdAndPlayerId(challengeId, playerId).isPresent();
+    }
+
+    /**
+     * サーバーで採点したスコアを記録する (同じ playerId は 1 チャレンジ 1 回まで)。
+     * クライアントからの直接提出は受け付けない (GameSessionService 経由のみ)。
+     */
     @Transactional
-    public boolean submit(DailyScoreSubmit req) {
-        if (req.dailyChallengeId() == null || req.playerId() == null || req.playerId().isBlank()) return false;
-        Optional<DailyScore> existing = scoreRepo
-            .findFirstByDailyChallengeIdAndPlayerId(req.dailyChallengeId(), req.playerId());
-        if (existing.isPresent()) return false; // 既に提出済み
+    public boolean recordScore(Long challengeId, String playerId, String displayName, int score) {
+        if (challengeId == null || playerId == null || playerId.isBlank()) return false;
+        if (hasPlayed(challengeId, playerId)) return false;
         DailyScore ds = new DailyScore();
-        ds.setDailyChallengeId(req.dailyChallengeId());
-        ds.setPlayerId(req.playerId());
-        String name = req.displayName();
+        ds.setDailyChallengeId(challengeId);
+        ds.setPlayerId(playerId);
+        String name = displayName;
         if (name == null || name.isBlank()) name = "名無し";
         if (name.length() > 32) name = name.substring(0, 32);
         ds.setDisplayName(name);
-        ds.setScore(Math.max(0, Math.min(req.score(), 5000)));
+        ds.setScore(Math.max(0, Math.min(score, 5000)));
         ds.setPlayedAt(Instant.now());
         scoreRepo.save(ds);
         return true;

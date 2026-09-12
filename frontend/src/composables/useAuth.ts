@@ -11,6 +11,7 @@ export interface UserInfo {
   level: number
   xpIntoLevel: number
   xpForNextLevel: number
+  streakDays?: number
 }
 
 interface AuthResponse {
