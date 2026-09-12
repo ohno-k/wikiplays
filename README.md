@@ -167,6 +167,10 @@ Free プランは通常モード (A〜E) 合計で 1 日 5 セッション (サ�
 
 - 全員 `app_user.is_dummy = true`、メールは `@dummy.wikiplays.invalid`、ログイン不可
 - 画面上ではダミーだと分からない (ランキング・デイリーに実ユーザーと同じように並ぶ)
+- 表示名は日本語版 Wikipedia の利用者一覧 (`list=allusers`、編集履歴のある利用者のみ) から拾った実在のハンドルを使う (`WikipediaUserNameSource`)。
+  bot・運営アカウント・IP 利用者・改名済みなど人のハンドルに見えない名前は除外
+- Wikipedia に到達できない時だけ単語合成の暫定名 (「ねむいパンダ」「yuki_12」など) を付け、次回起動時に Wikipedia 由来の名前へ付け替える
+  (`daily_score.display_name` も揃えて書き換える)。旧バージョンで投入した暫定名も同じく付け替わる
 - 停止: 環境変数 `WIKIPLAYS_DUMMY_USERS_ENABLED=false` (新規投入と日次活動が止まる。既存データはそのまま)
 - 一括削除:
 

@@ -1,8 +1,10 @@
 package com.wikiplays.service;
 
 import com.wikiplays.entity.DailyChallenge;
+import com.wikiplays.entity.DailyScore;
 import com.wikiplays.entity.PlayRecord;
 import com.wikiplays.entity.User;
+import com.wikiplays.repository.DailyScoreRepository;
 import com.wikiplays.repository.PlayRecordRepository;
 import com.wikiplays.repository.UserRepository;
 import org.slf4j.Logger;
@@ -20,18 +22,25 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 運営が投入する架空ユーザー (ダミー)。
  *
  * サービス初期にランキングやデイリーが空だと寂しいので、約 100 人分のユーザーと
  * 過去 60 日分のプレイ履歴を生成し、以後も 1 日数回「今日のプレイ」を追加して動いているように見せる。
+ *
+ * 表示名は日本語版 Wikipedia の利用者一覧から拾った実在のハンドル ({@link WikipediaUserNameSource}) を使う。
+ * 単語合成のダミー名は並ぶとそれと分かるため、Wikipedia に到達できない時だけの暫定名とし、
+ * 次回起動時に Wikipedia 由来の名前へ付け替える。
  *
  * 全員 app_user.is_dummy = true で識別でき、ログインはできない。停止・削除は README 参照。
  * 設定: wikiplays.seed.dummy-users.enabled / count
@@ -50,6 +59,8 @@ public class DummyUserSeeder {
     };
     private static final String[] DIFFICULTIES = {"relaxed", "normal", "normal", "normal", "speed"};
 
+    // ---- 暫定名 (Wikipedia に到達できない時のフォールバック)。このパターンに一致する名前は
+    //      isProvisionalName() で検出でき、次回起動時に Wikipedia 由来の名前へ付け替える。
     private static final String[] NAME_PREFIX = {
         "ねむい", "はらぺこ", "よふかし", "まったり", "はやおき", "さすらいの", "しずかな", "こだわり",
         "つよがり", "のんびり", "うっかり", "きまぐれ", "ひかえめ", "がんばる", "なぞの", "ほんきの",
@@ -68,6 +79,8 @@ public class DummyUserSeeder {
     private final UserRepository userRepository;
     private final PlayRecordRepository playRecordRepository;
     private final DailyChallengeService dailyService;
+    private final DailyScoreRepository dailyScoreRepository;
+    private final WikipediaUserNameSource nameSource;
     private final boolean enabled;
     private final int targetCount;
     private final Random random = new Random();
@@ -76,27 +89,70 @@ public class DummyUserSeeder {
         UserRepository userRepository,
         PlayRecordRepository playRecordRepository,
         DailyChallengeService dailyService,
+        DailyScoreRepository dailyScoreRepository,
+        WikipediaUserNameSource nameSource,
         @Value("${wikiplays.seed.dummy-users.enabled:false}") boolean enabled,
         @Value("${wikiplays.seed.dummy-users.count:100}") int targetCount
     ) {
         this.userRepository = userRepository;
         this.playRecordRepository = playRecordRepository;
         this.dailyService = dailyService;
+        this.dailyScoreRepository = dailyScoreRepository;
+        this.nameSource = nameSource;
         this.enabled = enabled;
         this.targetCount = targetCount;
     }
 
-    /** 起動後に不足分を投入する (既に十分いれば何もしない)。 */
+    /** 起動後に、暫定名のままのユーザーを付け替え、不足分を投入する (既に十分いれば何もしない)。 */
     @EventListener(ApplicationReadyEvent.class)
     @Async
     public void seedOnStartup() {
         if (!enabled) return;
+        try {
+            int renamed = renameProvisional();
+            if (renamed > 0) log.info("DummyUserSeeder: renamed {} provisional dummy users", renamed);
+        } catch (Exception e) {
+            log.warn("DummyUserSeeder rename failed: {}", e.getMessage());
+        }
         try {
             int created = seedMissing();
             if (created > 0) log.info("DummyUserSeeder: created {} dummy users", created);
         } catch (Exception e) {
             log.warn("DummyUserSeeder failed: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 暫定名 (単語合成のフォールバック名) のダミーユーザーを、Wikipedia 由来の名前に付け替える。
+     * デイリーランキングは daily_score に表示名を持つので、そちらも揃えて書き換える。
+     * Wikipedia から名前が取れなければ何もしない (次回起動時に再試行)。
+     */
+    @Transactional
+    public int renameProvisional() {
+        List<User> dummies = userRepository.findByDummyTrue();
+        List<User> provisional = new ArrayList<>();
+        Set<String> usedNames = new HashSet<>();
+        for (User u : dummies) {
+            usedNames.add(u.getDisplayName());
+            if (isProvisionalName(u.getDisplayName())) provisional.add(u);
+        }
+        if (provisional.isEmpty()) return 0;
+
+        Deque<String> pool = new ArrayDeque<>(nameSource.fetch(provisional.size() + 10));
+        int renamed = 0;
+        for (User u : provisional) {
+            String name = pollUnused(pool, usedNames);
+            if (name == null) break;
+            String playerId = "u" + u.getId();
+            for (DailyScore ds : dailyScoreRepository.findByPlayerId(playerId)) {
+                ds.setDisplayName(name);
+                dailyScoreRepository.save(ds);
+            }
+            u.setDisplayName(name);
+            userRepository.save(u);
+            renamed++;
+        }
+        return renamed;
     }
 
     @Transactional
@@ -107,6 +163,7 @@ public class DummyUserSeeder {
 
         Set<String> usedNames = new HashSet<>();
         for (User u : userRepository.findByDummyTrue()) usedNames.add(u.getDisplayName());
+        Deque<String> pool = new ArrayDeque<>(nameSource.fetch(missing + 10));
         LocalDate today = LocalDate.now(TZ);
         int created = 0;
         for (int i = 0; i < missing; i++) {
@@ -114,7 +171,7 @@ public class DummyUserSeeder {
             u.setEmail("dummy-" + java.util.UUID.randomUUID().toString().substring(0, 8) + "@" + DUMMY_EMAIL_DOMAIN);
             // BCrypt 形式ではない値なので、どのパスワードでも一致しない (加えて AuthService でも拒否)
             u.setPasswordHash("!dummy-" + new java.math.BigInteger(80, new SecureRandom()).toString(36));
-            u.setDisplayName(uniqueName(usedNames));
+            u.setDisplayName(uniqueName(pool, usedNames));
             u.setRole("USER");
             u.setEmailVerified(true);
             u.setDummy(true);
@@ -217,7 +274,23 @@ public class DummyUserSeeder {
         return Math.max(0, Math.min(5000, total));
     }
 
-    private String uniqueName(Set<String> used) {
+    /** Wikipedia 由来の名前を優先し、尽きたら暫定名 (単語合成) にフォールバックする。 */
+    private String uniqueName(Deque<String> pool, Set<String> used) {
+        String fromPool = pollUnused(pool, used);
+        if (fromPool != null) return fromPool;
+        return provisionalName(used);
+    }
+
+    /** プールから未使用の名前を 1 つ取り出す。無ければ null。 */
+    private static String pollUnused(Deque<String> pool, Set<String> used) {
+        while (!pool.isEmpty()) {
+            String name = pool.poll();
+            if (name != null && !name.isBlank() && used.add(name)) return name;
+        }
+        return null;
+    }
+
+    private String provisionalName(Set<String> used) {
         for (int attempt = 0; attempt < 200; attempt++) {
             String name;
             double r = random.nextDouble();
@@ -232,6 +305,28 @@ public class DummyUserSeeder {
             if (used.add(name)) return name;
         }
         return "player" + random.nextInt(100_000);
+    }
+
+    private static final Pattern PROVISIONAL_LATIN = Pattern.compile(
+        "^(" + String.join("|", LATIN_NAMES) + ")_?\\d{1,2}$");
+    private static final Pattern PROVISIONAL_SUFFIX_NUMBER = Pattern.compile(
+        "^(" + String.join("|", NAME_SUFFIX) + ")\\d{3}$");
+    private static final Pattern PROVISIONAL_PLAYER = Pattern.compile("^player\\d{1,5}$");
+
+    /** provisionalName() が生成しうる名前か (旧バージョンで投入された名前も含む)。 */
+    static boolean isProvisionalName(String name) {
+        if (name == null) return false;
+        if (PROVISIONAL_LATIN.matcher(name).matches()) return true;
+        if (PROVISIONAL_SUFFIX_NUMBER.matcher(name).matches()) return true;
+        if (PROVISIONAL_PLAYER.matcher(name).matches()) return true;
+        for (String prefix : NAME_PREFIX) {
+            if (!name.startsWith(prefix)) continue;
+            String rest = name.substring(prefix.length());
+            for (String suffix : NAME_SUFFIX) {
+                if (rest.equals(suffix)) return true;
+            }
+        }
+        return false;
     }
 
     private static double clamp(double v, double lo, double hi) {
