@@ -31,3 +31,8 @@ spring:
 logging:
   level:
     com.wikiplays: DEBUG
+
+wikiplays:
+  jwt:
+    # ローカル開発専用。本番は環境変数 JWT_SECRET を必ず設定する。
+    secret: local-dev-only-jwt-secret-not-for-production-use-0123456789

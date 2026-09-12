@@ -2,20 +2,16 @@ package com.wikiplays.controller;
 
 import com.wikiplays.dto.DailyChallengeResponse;
 import com.wikiplays.dto.DailyLeaderboardEntry;
-import com.wikiplays.dto.DailyScoreSubmit;
 import com.wikiplays.entity.DailyChallenge;
-import com.wikiplays.entity.Subscription;
 import com.wikiplays.entity.User;
 import com.wikiplays.repository.DailyChallengeRepository;
-import com.wikiplays.repository.SubscriptionRepository;
 import com.wikiplays.service.DailyChallengeService;
+import com.wikiplays.service.PlayQuotaService;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.security.core.Authentication;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,25 +19,29 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * デイリーチャレンジの概要・ランキング・アーカイブ一覧。
+ * プレイ自体 (問題配信・採点・スコア記録) は /api/game のセッション API で行う。
+ */
 @RestController
 @RequestMapping("/api/daily")
 public class DailyController {
 
     private final DailyChallengeService service;
     private final DailyChallengeRepository challengeRepo;
-    private final SubscriptionRepository subscriptionRepo;
+    private final PlayQuotaService quotaService;
 
     public DailyController(
         DailyChallengeService service,
         DailyChallengeRepository challengeRepo,
-        SubscriptionRepository subscriptionRepo
+        PlayQuotaService quotaService
     ) {
         this.service = service;
         this.challengeRepo = challengeRepo;
-        this.subscriptionRepo = subscriptionRepo;
+        this.quotaService = quotaService;
     }
 
-    /** 今日のチャレンジを取得 (なければ生成)。登録ユーザー限定。 */
+    /** 今日のチャレンジ概要を取得 (なければ生成)。登録ユーザー限定。 */
     @GetMapping("/today")
     public ResponseEntity<DailyChallengeResponse> today(
         @RequestParam(value = "scope", required = false) String scope,
@@ -56,21 +56,16 @@ public class DailyController {
         return resp.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.status(503).build());
     }
 
-    /** スコア提出。登録ユーザー限定 (1 日 1 回、user.id ベースで重複防止)。 */
-    @PostMapping("/submit")
-    public ResponseEntity<Void> submit(@RequestBody DailyScoreSubmit req, Authentication auth) {
+    /** 過去チャレンジの概要 (Premium 限定)。 */
+    @GetMapping("/challenge/{id}")
+    public ResponseEntity<DailyChallengeResponse> byId(@PathVariable("id") Long id, Authentication auth) {
         if (auth == null || !(auth.getPrincipal() instanceof User user)) {
             return ResponseEntity.status(401).build();
         }
-        // クライアントの playerId / displayName は使わず、ログインユーザー情報で上書きする
-        DailyScoreSubmit normalized = new DailyScoreSubmit(
-            req.dailyChallengeId(),
-            "u" + user.getId(),
-            user.getDisplayName(),
-            req.score()
-        );
-        boolean ok = service.submit(normalized);
-        return ok ? ResponseEntity.ok().build() : ResponseEntity.badRequest().build();
+        if (!quotaService.isPremium(user)) return ResponseEntity.status(402).build();
+        return service.getById(id, "u" + user.getId())
+            .map(ResponseEntity::ok)
+            .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     /** ランキング取得。 */
@@ -82,7 +77,7 @@ public class DailyController {
         return ResponseEntity.ok(service.leaderboard(challengeId, limit));
     }
 
-    /** 過去デイリーチャレンジ一覧 (Premium 限定)。 */
+    /** 過去デイリーチャレンジ一覧 (Premium 限定)。記事タイトルは含めない。 */
     @GetMapping("/archive")
     public ResponseEntity<?> archive(
         @RequestParam(value = "limit", defaultValue = "30") int limit,
@@ -91,23 +86,21 @@ public class DailyController {
         if (auth == null || !(auth.getPrincipal() instanceof User user)) {
             return ResponseEntity.status(401).build();
         }
-        Subscription sub = subscriptionRepo.findByUserId(user.getId()).orElse(null);
-        if (sub == null || !sub.isPremiumActive()) {
-            return ResponseEntity.status(402).build();
-        }
+        if (!quotaService.isPremium(user)) return ResponseEntity.status(402).build();
         List<DailyChallenge> challenges = challengeRepo.findByOrderByDateDescIdDesc(
             PageRequest.of(0, Math.min(limit, 100))
         );
-        // 詳細を返す (記事タイトル一覧のみ。プレイ時に full データ取得)
+        String playerId = "u" + user.getId();
         List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
         for (DailyChallenge c : challenges) {
-            result.add(java.util.Map.of(
-                "id", c.getId(),
-                "date", c.getDate().toString(),
-                "scope", c.getScopeKey().isEmpty() ? "" : c.getScopeKey(),
-                "genre", c.getGenreKey().isEmpty() ? "" : c.getGenreKey(),
-                "titles", java.util.List.of(c.getArticleTitlesCsv().split("\t"))
-            ));
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("id", c.getId());
+            m.put("date", c.getDate().toString());
+            m.put("scope", c.getScopeKey());
+            m.put("genre", c.getGenreKey());
+            m.put("questionCount", c.getArticleTitlesCsv().split("\t").length);
+            m.put("played", service.hasPlayed(c.getId(), playerId));
+            result.add(m);
         }
         return ResponseEntity.ok(result);
     }

@@ -68,6 +68,18 @@ public class User {
     @Column(name = "xp_day")
     private LocalDate xpDay;
 
+    /** 連続プレイ日数 (Asia/Tokyo の日付基準)。 */
+    @Column(name = "streak_days", nullable = false)
+    private int streakDays = 0;
+
+    /** 最後にプレイした日付 (ストリーク判定用)。 */
+    @Column(name = "last_play_date")
+    private LocalDate lastPlayDate;
+
+    /** 運営が投入した架空ユーザーなら true。ログイン不可・一括削除用。 */
+    @Column(name = "is_dummy", nullable = false)
+    private boolean dummy = false;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getEmail() { return email; }
@@ -92,4 +104,10 @@ public class User {
     public void setXpEarnedToday(int xpEarnedToday) { this.xpEarnedToday = xpEarnedToday; }
     public LocalDate getXpDay() { return xpDay; }
     public void setXpDay(LocalDate xpDay) { this.xpDay = xpDay; }
+    public int getStreakDays() { return streakDays; }
+    public void setStreakDays(int streakDays) { this.streakDays = streakDays; }
+    public LocalDate getLastPlayDate() { return lastPlayDate; }
+    public void setLastPlayDate(LocalDate lastPlayDate) { this.lastPlayDate = lastPlayDate; }
+    public boolean isDummy() { return dummy; }
+    public void setDummy(boolean dummy) { this.dummy = dummy; }
 }

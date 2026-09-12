@@ -50,7 +50,7 @@ function detectPersonNameParts(text: string, title: string): string[] | null {
  * の形をとり、タイトル本体を伏せても括弧書きで読み仮名が漏れる。
  * そこでマスクトークン直後に来る括弧書きも一緒に消す。
  */
-export function maskTitle(text: string, title: string): string {
+export function maskTitle(text: string, title: string, aliases: string[] = []): string {
   if (!text || !title) return text
 
   // 1. タイトル本体 (文字間の任意空白を許容)
@@ -70,6 +70,15 @@ export function maskTitle(text: string, title: string): string {
   const paren = title.split(/[（(]/)[0].trim()
   if (paren && paren !== title && paren.length >= 2) {
     out = out.replace(buildTolerantTitleRegex(paren), MASK_TOKEN)
+  }
+
+  // 3b. 別名 (リダイレクト)。1 文字の別名は誤爆が多いので 2 文字以上のみ
+  const seenAliases = new Set<string>()
+  for (const a of aliases) {
+    const t = (a ?? '').trim()
+    if (Array.from(t).length < 2 || seenAliases.has(t)) continue
+    seenAliases.add(t)
+    out = out.replace(buildTolerantTitleRegex(t), MASK_TOKEN)
   }
 
   // 4. マスクトークン直後の括弧書きを丸ごと消す

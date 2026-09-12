@@ -33,7 +33,7 @@ import { MODES } from '../types'
       <div class="p-5 space-y-3">
         <h2 class="text-xl font-bold flex items-center gap-2">
           <span class="text-2xl">⏱️</span>
-          <span>A モード (段階開示型)</span>
+          <span>A モード (じわじわ開示)</span>
         </h2>
         <p class="text-sm text-slate-600">メインモード。記事の末尾から段落を順次開示し、4 択で答えていく早押し系。</p>
         <div class="space-y-2 text-sm">
@@ -43,11 +43,16 @@ import { MODES } from '../types'
           </div>
           <div>
             <span class="font-bold">回答方式:</span> 答えのタイトルを <span class="text-blue-700 font-bold">1 文字ずつ 4 択</span> から選択。
-            <span class="text-red-600 font-bold">1 文字でも間違えると即不正解</span> です (途中までの文字数で部分点あり)。
+            <span class="text-emerald-700 font-bold">最初の 1 文字を選んだ時点でタイマーが止まり</span>、その段落数でスコアが確定します。
+            入力に時間がかかっても減点されません。
+          </div>
+          <div>
+            <span class="font-bold">ライフ:</span> ミスは <span class="text-rose-600 font-bold">1 回だけ</span> 許されます (その問題のスコアは半分)。
+            2 回目のミスで不正解 (途中までの文字数で部分点あり)。
           </div>
           <div>
             <span class="font-bold">スコア:</span> 少ない段落で当てるほど高得点 (1 段落=1000、2=800、3=600、4=400、5=200、6+=100)。
-            部分点は最大の半分まで。
+            部分点は最大の半分まで。採点はサーバー側で行われます。
           </div>
         </div>
       </div>
@@ -77,6 +82,7 @@ import { MODES } from '../types'
         <li><span class="font-bold">スコープ:</span> 🇯🇵 日本 / 🌍 世界 のどちらか</li>
         <li><span class="font-bold">ジャンル:</span> 鉄道 / 歴史 / 地理 / 科学 / 生物 / 植物 / 古生物 / 天体 / 芸術 / 文学 / 音楽 / 映画 / アニメ・漫画 / スポーツ / 神話 / 建築 / 乗り物 / 言語 / IT / 食 (全 20)</li>
         <li><span class="font-bold">総合 (おまかせ):</span> 全 Wikipedia からランダム出題</li>
+        <li><span class="font-bold">正解判定 (B モード):</span> Wikipedia の別名・略称 (リダイレクト) も正解として扱います</li>
         <li><span class="font-bold">コミュニティジャンル:</span> プレミアム会員が作成、誰でもプレイ可能</li>
       </ul>
     </div>
@@ -90,8 +96,9 @@ import { MODES } from '../types'
           <span>デイリーチャレンジ</span>
         </h2>
         <ul class="list-disc list-inside text-sm space-y-1">
-          <li>毎日 1 回、全プレイヤーが <span class="font-bold">同じ問題</span> に挑戦できます</li>
-          <li>ジャンルごとに別のチャレンジが用意されます</li>
+          <li>毎日、全プレイヤーが <span class="font-bold">同じ問題</span> に挑戦できます</li>
+          <li>総合と 20 ジャンル × 日本/世界のチャレンジがあり、それぞれ 1 日 1 回</li>
+          <li>フリープランの回数制限にはカウントされません</li>
           <li>記録されたスコアは <span class="font-bold">グローバルランキング</span> に反映</li>
           <li>結果は画像・テキストで簡単にシェア可能</li>
           <li>🇵 過去のデイリーは <span class="text-amber-600 font-bold">プレミアム限定</span> でアーカイブ閲覧</li>
@@ -108,7 +115,8 @@ import { MODES } from '../types'
           <span>ランキング</span>
         </h2>
         <ul class="list-disc list-inside text-sm space-y-1">
-          <li>ログインユーザーの累計スコア / 最高スコア / プレイ数を集計</li>
+          <li>ログインユーザーの累計スコア / 最高スコア / プレイ数を集計 (全モード対象)</li>
+        <li>プレイするたびに XP が貯まり、レベルと称号が上がります。毎日遊ぶと 🔥 連続日数も伸びます</li>
           <li>期間: 今日 / 今週 / 今月 / 全期間</li>
           <li>ジャンル別・スコープ別の絞り込み可能</li>
           <li>匿名プレイはランキングに反映されません (アカウント登録でランクイン)</li>
@@ -144,11 +152,12 @@ import { MODES } from '../types'
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <tr><td class="py-2">A モードのプレイ</td><td class="text-center">1 日 5 問</td><td class="text-center font-bold text-emerald-600">無制限</td></tr>
-              <tr><td class="py-2">デイリーチャレンジ</td><td class="text-center">1 日 1 回</td><td class="text-center">1 日 1 回</td></tr>
+              <tr><td class="py-2">通常モード (A〜E) のプレイ</td><td class="text-center">合計 1 日 5 セッション</td><td class="text-center font-bold text-emerald-600">無制限</td></tr>
+              <tr><td class="py-2">デイリーチャレンジ</td><td class="text-center">各 1 日 1 回</td><td class="text-center">各 1 日 1 回</td></tr>
               <tr><td class="py-2">過去デイリーアーカイブ</td><td class="text-center">−</td><td class="text-center font-bold text-emerald-600">無制限</td></tr>
               <tr><td class="py-2">ランキング参加</td><td class="text-center">✓</td><td class="text-center">✓</td></tr>
-              <tr><td class="py-2">コミュニティジャンル閲覧/プレイ</td><td class="text-center">✓</td><td class="text-center">✓</td></tr>
+              <tr><td class="py-2">コミュニティジャンル閲覧</td><td class="text-center">✓</td><td class="text-center">✓</td></tr>
+              <tr><td class="py-2">コミュニティジャンルのプレイ</td><td class="text-center">−</td><td class="text-center font-bold text-emerald-600">✓</td></tr>
               <tr><td class="py-2">コミュニティジャンル作成</td><td class="text-center">−</td><td class="text-center font-bold text-emerald-600">✓</td></tr>
               <tr><td class="py-2">フレンド機能</td><td class="text-center">✓</td><td class="text-center">✓</td></tr>
               <tr><td class="py-2">広告</td><td class="text-center">あり</td><td class="text-center font-bold text-emerald-600">なし</td></tr>
@@ -182,6 +191,7 @@ import { MODES } from '../types'
         <li>災害・事故の犠牲者個人</li>
         <li>自殺・自死関連</li>
         <li>未成年が関わる事件</li>
+        <li>存命人物のうち、本文に事件・逮捕などの記述がある記事</li>
         <li>「○○の一覧」のような索引記事 (ゲームに不向き)</li>
       </ul>
       <p class="text-xs text-slate-500">

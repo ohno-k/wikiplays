@@ -6,13 +6,16 @@
 
 ## 主な機能
 
-- **メインモード (Aモード)**: 段落を下から開示しながら 1 文字ずつタイトル入力 (部分点あり)
-- **20+ ジャンル × 日本/世界スコープ** から挑戦するジャンルを選択
+- **メインモード (A モード「じわじわ開示」)**: 段落を末尾から開示しながら 1 文字ずつ 4 択で入力。最初の 1 文字でタイマーが止まり、ミスは 1 回まで (ライフ)。進行・採点はサーバー側 (`/api/game`) で行い、答えはブラウザに渡らない
+- **B〜E モード**: ヒントカード / 年代あて / 4 択クイズ / 数字あて。全モードが XP・ランキング・履歴の対象
+- **20 ジャンル × 日本/世界スコープ** から挑戦するジャンルを選択。カテゴリはランダムな位置から読むので同じ記事に偏らない
+- **別名対応**: Wikipedia のリダイレクト (略称・別表記) を正解判定とマスクに使用
 - **コミュニティジャンル**: プレミアム会員は独自カテゴリを作成・共有
-- **デイリーチャレンジ**: 全プレイヤー共通の 1 日 1 問 + 全国ランキング
+- **デイリーチャレンジ**: 総合 + ジャンル別。全プレイヤー共通の 5 問、各 1 日 1 回 + ランキング (Free の回数制限外)
 - **デイリーアーカイブ** (プレミアム): 過去のデイリーをいつでも挑戦
+- **XP / レベル / 称号 / 連続プレイ日数 (ストリーク)**
 - **フレンド / 非同期チャレンジ**: スコアを送りつけて競う
-- **倫理フィルタ**: 事件・戦争・災害など被害者のいる記事は出題から除外
+- **倫理フィルタ**: 事件・戦争・災害など被害者のいる記事は出題から除外。存命人物は事件系の記述がある場合のみ除外
 
 ## 技術スタック
 
@@ -34,16 +37,20 @@ wikiplays/
 │   └── src/components/         # 共通 UI
 ├── backend/                    # Spring Boot アプリ
 │   ├── src/main/java/com/wikiplays/
-│   │   ├── controller/         # REST API
-│   │   ├── service/            # WikipediaService, StripeService, AuthService, ...
+│   │   ├── controller/         # REST API (GameController = サーバー側ゲームセッション)
+│   │   ├── game/               # GameSessionService, TextMasker, CharInput (進行・マスク・採点)
+│   │   ├── service/            # WikipediaService, StripeService, AuthService, DummyUserSeeder, ...
 │   │   ├── entity/             # JPA エンティティ
 │   │   ├── repository/         # Spring Data リポジトリ
-│   │   ├── config/             # SecurityConfig, WebConfig, JwtFilter
-│   │   └── filter/             # ArticleFilter (倫理フィルタ含む)
-│   └── src/main/resources/
-│       ├── application.yml             # デフォルト + 本番想定
-│       ├── application-local.yml       # ローカル開発 (H2)
-│       └── application-secrets.yml     # ローカル秘密 (gitignore)
+│   │   ├── security/           # JwtService, JwtAuthFilter, RateLimitFilter
+│   │   └── config/             # SecurityConfig, WebConfig, WebClientConfig
+│   ├── src/main/resources/
+│   │   ├── application.yml             # デフォルト + 本番想定
+│   │   ├── application-local.yml       # ローカル開発 (H2)
+│   │   ├── application-secrets.yml     # ローカル秘密 (gitignore)
+│   │   └── db/migration/               # Flyway マイグレーション
+│   └── src/test/                       # JUnit (mvn test)
+├── .github/workflows/ci.yml    # CI: フロント typecheck/test/build + バックエンド mvn test
 ├── docker-compose.yml          # ローカル Postgres 用 (任意)
 └── .agents/skills/             # Stripe AI Skills
 ```
@@ -79,6 +86,15 @@ npm run dev
 
 - 起動 URL: http://localhost:5173
 - Vite の dev proxy で `/api/*` が 8080 のバックエンドに転送される
+
+### テスト
+
+```bash
+cd frontend && npm run typecheck && npm test   # vue-tsc + vitest (masking / scoring)
+cd backend && mvn test                          # JUnit (フィルタ・XP・マスク・採点 + コンテキスト起動)
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) が push ごとに同じチェックを実行する。
 
 ### Stripe / OAuth / SMTP の秘密設定
 
@@ -124,7 +140,8 @@ Render を使用。詳細手順は `docs/` 配下を参照 (準備中)。
 | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `prod` |
 | `DATABASE_URL` | Render Postgres の Internal URL |
-| `WIKIPLAYS_JWT_SECRET` | JWT 署名鍵 |
+| `JWT_SECRET` | JWT 署名鍵 (32 文字以上)。**未設定だと起動しない** (local プロファイル以外) |
+| `WIKIPLAYS_DUMMY_USERS_ENABLED` | ダミーユーザーの投入・日次活動 (既定 `true`。`false` で停止) |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe ライブキー |
 | `STRIPE_PRICE_ID_1M` / `_3M` / `_6M` | 各プラン Price ID |
 | `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` | (任意) Google OAuth |
@@ -140,7 +157,24 @@ Render を使用。詳細手順は `docs/` 配下を参照 (準備中)。
 | 3 ヶ月 | ¥1,300 | ¥433 (13% お得) |
 | 6 ヶ月 | ¥2,000 | ¥333 (33% お得) |
 
-プレミアム特典: 無制限プレイ、デイリーアーカイブ、コミュニティジャンル作成、詳細統計、広告非表示。
+プレミアム特典: 無制限プレイ、デイリーアーカイブ、コミュニティジャンル作成・プレイ、詳細統計、広告非表示。
+Free プランは通常モード (A〜E) 合計で 1 日 5 セッション (サーバー側で判定)。デイリーは対象外。
+
+## ダミーユーザー (運営投入の架空プレイヤー)
+
+ランキングやデイリーが空だと寂しいので、`DummyUserSeeder` が起動時に約 100 人の架空ユーザーと
+過去 60 日分のプレイ履歴を投入し、以後 2 時間ごとに一部が「今日プレイした」ことにする (XP・ストリーク・デイリースコアも実ユーザーと同じルールで更新)。
+
+- 全員 `app_user.is_dummy = true`、メールは `@dummy.wikiplays.invalid`、ログイン不可
+- 画面上ではダミーだと分からない (ランキング・デイリーに実ユーザーと同じように並ぶ)
+- 停止: 環境変数 `WIKIPLAYS_DUMMY_USERS_ENABLED=false` (新規投入と日次活動が止まる。既存データはそのまま)
+- 一括削除:
+
+```sql
+DELETE FROM daily_score WHERE player_id IN (SELECT 'u' || id FROM app_user WHERE is_dummy);
+DELETE FROM play_record WHERE user_id IN (SELECT id FROM app_user WHERE is_dummy);
+DELETE FROM app_user WHERE is_dummy;
+```
 
 ## 倫理ポリシー
 

@@ -11,6 +11,9 @@ import java.util.Set;
  *
  * 倫理的に避けるべき記事 (被害者がいる事件、現代の悲劇、自殺、災害の個別犠牲者など)
  * を多段のルールで除外する。完全自動化は危険なので、最初は厳しめに弾く。
+ *
+ * 存命人物は以前は一律除外していたが、スポーツ・音楽・IT などの現役がほぼ全滅して
+ * ジャンルの面白さを損なうため、事件系の語が本文にあるものだけ除外する方針に変更した。
  */
 @Service
 public class ArticleFilter {
@@ -23,7 +26,6 @@ public class ArticleFilter {
         "自殺", "自死", "心中", "失踪",
         "事故", "災害", "墜落", "脱線", "沈没", "炎上", "爆発",
         "感染症", "疫病", "病死", "急死",
-        "存命人物", "現代の俳優", "現代の歌手", "現代の政治家",
         "ポルノ", "アダルト", "性風俗",
         "陰謀論", "差別"
     );
@@ -67,8 +69,21 @@ public class ArticleFilter {
         "総合"
     );
 
+    /**
+     * 存命人物は出題対象に含めるが、事件・スキャンダル系の語が本文に少しでも多ければ弾く。
+     * (故人・非人物記事は 5 回、存命人物は 2 回でアウト)
+     */
+    private static final int SOFT_LIMIT_DEFAULT = 5;
+    private static final int SOFT_LIMIT_LIVING = 2;
+
     public boolean isAllowed(ArticleData article) {
         if (article == null) return false;
+        boolean living = false;
+        if (article.categories() != null) {
+            for (String cat : article.categories()) {
+                if (cat.contains("存命人物")) { living = true; break; }
+            }
+        }
 
         // 記事タイトルそのものが事件・事故系
         String title = article.title();
@@ -99,14 +114,15 @@ public class ArticleFilter {
             if (full.contains(bw)) return false;
         }
 
-        // 本文の弱キーワード (合計 5 回以上でアウト)
+        // 本文の弱キーワード (合計 N 回以上でアウト。存命人物はより厳しく)
+        int softLimit = living ? SOFT_LIMIT_LIVING : SOFT_LIMIT_DEFAULT;
         int softHits = 0;
         for (String bw : CONTENT_SOFT_BLOCKLIST) {
             int idx = 0;
             while ((idx = full.indexOf(bw, idx)) >= 0) {
                 softHits++;
                 idx += bw.length();
-                if (softHits >= 5) return false;
+                if (softHits >= softLimit) return false;
             }
         }
 

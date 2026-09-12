@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import ModeLayout from './ModeLayout.vue'
 import GenrePicker from '../../components/GenrePicker.vue'
 import CurrentGenreBadge from '../../components/CurrentGenreBadge.vue'
@@ -8,9 +8,14 @@ import type { ArticleData, Genre, Scope } from '../../types'
 import { isCorrect, scoreEmoji } from '../../scoring'
 import { maskTitle, splitSentences } from '../../masking'
 import { useArticleQueue } from '../../composables/useArticleQueue'
+import { useSessionRecorder } from '../../composables/useSessionRecorder'
+import { useAuth } from '../../composables/useAuth'
+import XpResultCard from '../../components/XpResultCard.vue'
+import ResultShareCard from '../../components/ResultShareCard.vue'
 
 const TOTAL_QUESTIONS = 5
 const MAX_SCORE = 1000
+const MAX_TOTAL = MAX_SCORE * TOTAL_QUESTIONS
 
 type HintKey =
   | 'charCount'
@@ -70,7 +75,7 @@ const totalScore = computed(() => results.value.reduce((s, r) => s + r.score, 0)
 
 const introSentences = computed(() => {
   if (!article.value) return [] as string[]
-  return splitSentences(article.value.introExtract).map(s => maskTitle(s, article.value!.title))
+  return splitSentences(article.value.introExtract).map(s => maskTitle(s, article.value!.title, article.value!.aliases ?? []))
 })
 
 const answerCoreLength = computed(() => {
@@ -162,9 +167,13 @@ const selectedGenre = ref<Genre | null>(null)
 const selectedScope = ref<Scope>('jp')
 const started = ref(false)
 
+const { token, isLoggedIn } = useAuth()
+const recorder = useSessionRecorder('b')
+
 const queue = useArticleQueue<ArticleData>({
   genre: selectedGenre,
   scope: selectedScope,
+  token,
   prepare: (a) => {
     if (!a.introExtract || a.introExtract.length < 30) return null
     return a
@@ -209,7 +218,7 @@ async function loadNext() {
 
 function submit() {
   if (!article.value) return
-  const correct = isCorrect(answer.value, article.value.title)
+  const correct = isCorrect(answer.value, article.value.title, article.value.aliases ?? [])
   const score = correct ? currentMaxScore.value : 0
   results.value.push({
     title: article.value.title,
@@ -229,19 +238,23 @@ function giveUp() {
 function nextQuestion() {
   if (currentQ.value < TOTAL_QUESTIONS) { currentQ.value++; loadNext() }
 }
-function restart() { results.value = []; currentQ.value = 1; queue.reset(); loadNext() }
+function restart() { results.value = []; currentQ.value = 1; recorder.reset(); queue.reset(); loadNext() }
 
 const shareText = computed(() => {
   const emojis = results.value.map(r => scoreEmoji(r.score, MAX_SCORE)).join('')
   return `Wikiplays Bモード ${totalScore.value}/${MAX_SCORE * TOTAL_QUESTIONS}\n${emojis}`
 })
 
-function copyShare() { navigator.clipboard.writeText(shareText.value) }
+watch(finished, (v) => {
+  if (!v) return
+  recorder.record({ genre: selectedGenre.value, scope: selectedScope.value, score: totalScore.value, maxScore: MAX_TOTAL })
+})
+
 
 </script>
 
 <template>
-  <ModeLayout mode-name="手がかり選択型" short-name="B モード" emoji="🃏" theme="purple" gradient="from-fuchsia-500 to-purple-600">
+  <ModeLayout mode-name="ヒントカード" short-name="B モード" emoji="🃏" theme="purple" gradient="from-fuchsia-500 to-purple-600">
     <GenrePicker
       v-if="!started"
       mode-name="B モード"
@@ -271,11 +284,19 @@ function copyShare() { navigator.clipboard.writeText(shareText.value) }
           </div>
         </div>
       </div>
-      <div class="flex gap-2">
-        <button @click="restart" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">もう一度</button>
-        <button @click="copyShare" class="px-4 py-2 bg-slate-200 rounded hover:bg-slate-300">結果をコピー</button>
+      <XpResultCard v-if="recorder.xpResult.value" :xp="recorder.xpResult.value" />
+      <div v-else-if="!isLoggedIn" class="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded p-3">
+        ログインすると XP とレベルが貯まり、ランキングに参加できます。
+        <router-link to="/login" class="text-blue-600 hover:underline ml-1">ログイン / 登録</router-link>
       </div>
-      <pre class="text-xs bg-slate-100 p-3 rounded whitespace-pre-wrap">{{ shareText }}</pre>
+      <ResultShareCard
+        title="B モード"
+        :total-score="totalScore"
+        :max-score="MAX_TOTAL"
+        :results="results"
+        theme-gradient="from-fuchsia-500 via-purple-500 to-indigo-600"
+        :share-text="shareText" />
+      <button @click="restart" class="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">もう一度</button>
     </div>
 
     <div v-else>
@@ -284,7 +305,15 @@ function copyShare() { navigator.clipboard.writeText(shareText.value) }
         <span>現在の最大スコア: <span class="font-bold text-blue-700">{{ currentMaxScore }}</span> / {{ MAX_SCORE }} (使用 {{ currentCost }})</span>
       </div>
       <div v-if="loading" class="text-slate-500">読み込み中…</div>
-      <div v-else-if="error" class="text-red-600">エラー: {{ error }}</div>
+      <div v-else-if="error" class="space-y-2">
+        <div class="text-red-600">エラー: {{ error }}</div>
+        <div v-if="error.includes('上限')" class="text-sm text-slate-600">
+          フリープランは通常モード合計で 1 日 5 セッションまでです。
+          <router-link to="/daily" class="text-blue-600 hover:underline">デイリーチャレンジ</router-link> は上限に関係なく挑戦できます。
+          <router-link to="/account" class="text-blue-600 hover:underline ml-1">⭐ プレミアムで無制限に</router-link>
+        </div>
+        <button v-else @click="loadNext" class="px-3 py-1 bg-slate-200 rounded hover:bg-slate-300 text-xs">もう一度試す</button>
+      </div>
 
       <div v-else-if="article" class="space-y-4">
         <!-- ヒントカードボタン群 -->
@@ -370,7 +399,7 @@ function copyShare() { navigator.clipboard.writeText(shareText.value) }
         <!-- 回答エリア -->
         <div v-if="!answered" class="space-y-2">
           <div class="flex gap-2">
-            <input v-model="answer" @keyup.enter="submit" type="text" placeholder="記事のタイトル"
+            <input v-model="answer" @keyup.enter="submit" type="text" placeholder="記事のタイトル (略称・別名も可)"
               class="flex-1 border border-slate-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <button @click="submit" :disabled="!answer" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-slate-300">
               回答

@@ -33,6 +33,11 @@ public class XpService {
         this.userRepository = userRepository;
     }
 
+    /** ID からユーザーを取得 (無ければ null)。 */
+    public User loadUser(Long id) {
+        return id == null ? null : userRepository.findById(id).orElse(null);
+    }
+
     /** プレイ結果から得られる XP 量 (キャップ前)。 */
     public static int xpForPlay(int score) {
         return 10 + Math.max(0, score) / 50;
@@ -63,7 +68,8 @@ public class XpService {
         int level,
         long xpIntoLevel,
         long xpForNextLevel,
-        int dailyRemaining
+        int dailyRemaining,
+        int streakDays
     ) {}
 
     public XpInfo describe(User user) {
@@ -72,7 +78,7 @@ public class XpService {
         long base = xpForLevelStart(level);
         long next = xpForLevelStart(level + 1);
         int dailyRemaining = remainingDailyCap(user);
-        return new XpInfo(xp, level, xp - base, next - base, dailyRemaining);
+        return new XpInfo(xp, level, xp - base, next - base, dailyRemaining, currentStreak(user));
     }
 
     /** プレイ結果に対する XP を付与。匿名 (null) は noop。返り値は加算後のスナップショット。 */
@@ -80,6 +86,7 @@ public class XpService {
     public AwardResult award(User user, int score) {
         if (user == null) return null;
         resetIfNewDay(user);
+        updateStreak(user);
 
         int requested = xpForPlay(score);
         int remainingCap = Math.max(0, DAILY_CAP - user.getXpEarnedToday());
@@ -104,6 +111,28 @@ public class XpService {
             user.setXpEarnedToday(0);
             user.setXpDay(today);
         }
+    }
+
+    /** 連続プレイ日数を更新する。昨日プレイしていれば +1、空いていれば 1 に戻す。 */
+    private void updateStreak(User user) {
+        LocalDate today = LocalDate.now(TZ);
+        LocalDate last = user.getLastPlayDate();
+        if (today.equals(last)) return;
+        if (last != null && today.minusDays(1).equals(last)) {
+            user.setStreakDays(user.getStreakDays() + 1);
+        } else {
+            user.setStreakDays(1);
+        }
+        user.setLastPlayDate(today);
+    }
+
+    /** 表示用の連続日数。昨日までで途切れていれば 0。 */
+    public int currentStreak(User user) {
+        LocalDate today = LocalDate.now(TZ);
+        LocalDate last = user.getLastPlayDate();
+        if (last == null) return 0;
+        if (today.equals(last) || today.minusDays(1).equals(last)) return user.getStreakDays();
+        return 0;
     }
 
     private int remainingDailyCap(User user) {

@@ -17,6 +17,8 @@ export interface ArticleData {
   pageUrl: string
   extractedYear: number | null
   extractedYearKind: YearKind | null
+  /** この記事へのリダイレクト名 (別名・略称)。古いキャッシュでは欠けていることがある。 */
+  aliases?: string[]
 }
 
 export type YearKind =
@@ -59,55 +61,67 @@ export interface ModeMeta {
 export const MODES: ModeMeta[] = [
   {
     id: 'a',
-    name: '段階開示型',
+    name: 'じわじわ開示',
     shortName: 'A モード',
-    tagline: '早押し・1 文字ずつ',
-    description: '記事末尾から 1 段落ずつ自動開示。4 択で 1 文字ずつ答える。',
+    tagline: 'メインモード・早押し',
+    description: '記事の末尾から段落が少しずつ開示。早く気づくほど高得点。答えは 4 択で 1 文字ずつ。',
     emoji: '⏱️',
     theme: 'blue',
     gradient: 'from-sky-500 to-indigo-600',
   },
   {
     id: 'b',
-    name: '手がかり選択型',
+    name: 'ヒントカード',
     shortName: 'B モード',
     tagline: 'カードを引いて推理',
-    description: '13 種のヒントカードから好きなものを選んで開示。安く当てた人ほど高得点。',
+    description: '13 種のヒントカードから好きなものを開く。安いカードで当てるほど高得点。',
     emoji: '🃏',
     theme: 'purple',
     gradient: 'from-fuchsia-500 to-purple-600',
   },
   {
     id: 'c',
-    name: '座標推定型',
+    name: '年代あて',
     shortName: 'C モード',
-    tagline: '年代を当てる',
-    description: '記事の主題が何年か、粗いスライダー → ズームの 2 段階で推定。連続値スコア。',
+    tagline: '何年のできごと?',
+    description: '記事の主題が何年か、ざっくり → ズームの 2 段階スライダーで当てる。近いほど高得点。',
     emoji: '🎯',
     theme: 'emerald',
     gradient: 'from-emerald-500 to-teal-600',
   },
   {
     id: 'd',
-    name: '消去法型',
+    name: '4 択クイズ',
     shortName: 'D モード',
-    tagline: '4 択で当てる',
-    description: '同分野の 4 択から正解を選択。ヒントを取るか答えるかのジレンマ。',
+    tagline: 'サクッと遊べる',
+    description: '同じ分野の 4 つの候補から正解の記事を選ぶ。ヒントを開くか、勘で答えるか。',
     emoji: '🔍',
     theme: 'amber',
     gradient: 'from-amber-500 to-orange-600',
   },
   {
     id: 'e',
-    name: '逆引き型',
+    name: '数字あて',
     shortName: 'E モード',
-    tagline: '記事の数値を予測',
-    description: '記事タイトルだけ提示。文字数・言語数・節数・画像数を予測する。',
+    tagline: '記事の規模を予測',
+    description: 'タイトルだけを見て、記事のバイト数・他言語版の数・節数・画像数を予測する。',
     emoji: '🔄',
     theme: 'rose',
     gradient: 'from-rose-500 to-pink-600',
   },
 ]
+
+/** 全モード (デイリー含む) の識別子。 */
+export type PlayMode = ModeId | 'daily'
+
+export const PLAY_MODE_LABELS: Record<PlayMode, string> = {
+  a: 'A モード',
+  b: 'B モード',
+  c: 'C モード',
+  d: 'D モード',
+  e: 'E モード',
+  daily: 'デイリー',
+}
 
 export function getModeById(id: ModeId): ModeMeta | undefined {
   return MODES.find(m => m.id === id)

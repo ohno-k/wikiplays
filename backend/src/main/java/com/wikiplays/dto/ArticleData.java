@@ -20,5 +20,11 @@ public record ArticleData(
     int articleLength,             // 記事のバイト長
     String pageUrl,                // Wikipedia の記事 URL
     Integer extractedYear,         // 主題に紐づく年 (取れない場合 null) — モード C 用
-    String extractedYearKind       // 年の種類 (birth/death/founded/...) — モード C で表示用
-) {}
+    String extractedYearKind,      // 年の種類 (birth/death/founded/...) — モード C で表示用
+    List<String> aliases           // この記事へのリダイレクト名 (別名・略称・旧表記)。正解判定とマスクに使う
+) {
+    /** 旧キャッシュ (aliases 無し) を読んだときも null にならないようにする。 */
+    public List<String> aliases() {
+        return aliases == null ? List.of() : aliases;
+    }
+}

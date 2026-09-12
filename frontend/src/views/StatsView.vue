@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getPlayHistory, clearPlayHistory, getDisplayName, setDisplayName, type PlayRecord } from '../api'
-import { GENRES, SCOPE_LABELS } from '../types'
+import { GENRES, SCOPE_LABELS, PLAY_MODE_LABELS } from '../types'
 
 const history = ref<PlayRecord[]>([])
 const displayName = ref(getDisplayName())
@@ -162,7 +162,9 @@ function reset() {
           <span class="text-xs text-slate-500 w-16 shrink-0 number-display">{{ formatDate(r.date) }}</span>
           <span class="flex-1 truncate">
             {{ recordLabel(r).emoji }} {{ recordLabel(r).text }}
-            <span v-if="r.mode === 'daily'" class="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">DAILY</span>
+            <span :class="['ml-1 px-1.5 py-0.5 rounded text-xs', r.mode === 'daily' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">
+              {{ PLAY_MODE_LABELS[r.mode] ?? r.mode }}
+            </span>
             <span v-if="r.difficulty" class="ml-1 text-xs text-slate-400">{{ r.difficulty }}</span>
           </span>
           <span class="number-display font-bold">{{ r.score }}</span>

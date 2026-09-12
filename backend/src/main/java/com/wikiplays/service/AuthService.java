@@ -75,6 +75,10 @@ public class AuthService {
     @Transactional
     public AuthResult login(String email, String password) {
         Optional<User> opt = userRepository.findByEmail(email);
+        // 運営投入の架空ユーザーはログイン不可
+        if (opt.isPresent() && opt.get().isDummy()) {
+            throw new IllegalArgumentException("メールアドレスまたはパスワードが違います");
+        }
         if (opt.isEmpty() || !passwordEncoder.matches(password, opt.get().getPasswordHash())) {
             throw new IllegalArgumentException("メールアドレスまたはパスワードが違います");
         }

@@ -18,10 +18,23 @@ public class JwtService {
     private final long expirationMs;
 
     public JwtService(
-        @Value("${wikiplays.jwt.secret:please-change-me-very-long-secret-key-please-change}") String secret,
-        @Value("${wikiplays.jwt.expiration-ms:2592000000}") long expirationMs // 30 日
+        @Value("${wikiplays.jwt.secret:}") String secret,
+        @Value("${wikiplays.jwt.expiration-ms:2592000000}") long expirationMs, // 30 日
+        org.springframework.core.env.Environment env
     ) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes());
+        boolean local = env.acceptsProfiles(org.springframework.core.env.Profiles.of("local", "test"));
+        if (secret == null || secret.isBlank() || secret.contains("please-change")) {
+            if (!local) {
+                // 本番で秘密鍵未設定のまま起動すると誰でもトークンを偽造できるので、起動を止める
+                throw new IllegalStateException(
+                    "wikiplays.jwt.secret (環境変数 JWT_SECRET) が未設定です。32 文字以上のランダム文字列を設定してください。");
+            }
+            secret = "local-dev-only-jwt-secret-not-for-production-use-0123456789";
+        }
+        if (secret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("wikiplays.jwt.secret は 32 バイト以上必要です");
+        }
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         this.expirationMs = expirationMs;
     }
 

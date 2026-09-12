@@ -56,7 +56,7 @@ public class CommunityGenrePoolWarmer {
     private final CachedArticleRepository cachedArticleRepository;
     private final WikipediaService wikipediaService;
     private final ArticleFilter filter;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = ArticleJson.MAPPER;
 
     public CommunityGenrePoolWarmer(
         CustomGenreRepository genreRepository,

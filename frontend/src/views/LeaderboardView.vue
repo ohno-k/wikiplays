@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { fetchLeaderboard, type LeaderboardRow } from '../api'
-import { GENRES, type Genre, type Scope } from '../types'
+import { GENRES, PLAY_MODE_LABELS, type Genre, type PlayMode, type Scope } from '../types'
 
 type Period = 'today' | 'week' | 'month' | 'all'
 
 const period = ref<Period>('all')
 const genre = ref<Genre | ''>('')
 const scope = ref<Scope | ''>('')
-const mode = ref<'a' | 'daily' | ''>('')
+const mode = ref<PlayMode | ''>('')
 
 const rows = ref<LeaderboardRow[]>([])
 const loading = ref(false)
@@ -79,8 +79,7 @@ onMounted(load)
           <div class="text-xs font-bold text-slate-600 mb-1">モード</div>
           <select v-model="mode" class="w-full border border-slate-300 rounded px-2 py-1 text-sm">
             <option value="">すべて</option>
-            <option value="a">A モード</option>
-            <option value="daily">デイリー</option>
+            <option v-for="(label, id) in PLAY_MODE_LABELS" :key="id" :value="id">{{ label }}</option>
           </select>
         </div>
         <div>

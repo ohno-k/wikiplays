@@ -22,7 +22,7 @@ public interface PlayRecordRepository extends JpaRepository<PlayRecord, Long> {
     @Query(value = """
         SELECT COUNT(*) FROM play_record
         WHERE played_at >= :since
-          AND mode = :mode
+          AND mode IN (:modes)
           AND (
             (:userId IS NOT NULL AND user_id = :userId)
             OR (:userId IS NULL AND :playerId IS NOT NULL AND player_id = :playerId)
@@ -31,7 +31,7 @@ public interface PlayRecordRepository extends JpaRepository<PlayRecord, Long> {
     long countSince(
         @Param("userId") Long userId,
         @Param("playerId") String playerId,
-        @Param("mode") String mode,
+        @Param("modes") List<String> modes,
         @Param("since") Instant since
     );
 

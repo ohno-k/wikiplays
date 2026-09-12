@@ -72,7 +72,7 @@ public class AuthController {
         XpService.XpInfo xp = xpService.describe(u);
         return new AuthResponse.UserInfo(
             u.getId(), u.getEmail(), u.getDisplayName(), u.getRole(), plan, premiumActive,
-            xp.xp(), xp.level(), xp.xpIntoLevel(), xp.xpForNextLevel()
+            xp.xp(), xp.level(), xp.xpIntoLevel(), xp.xpForNextLevel(), xp.streakDays()
         );
     }
 

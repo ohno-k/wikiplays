@@ -8,7 +8,8 @@ public record DailyChallengeResponse(
     LocalDate date,
     String scope,
     String genre,
-    List<ArticleData> articles,
+    /** 問題数。記事本文はゲームセッション経由でのみ配信する。 */
+    int questionCount,
     long playerCount,
     int topScore,
     /** 認証ユーザーが今日のチャレンジを既プレイ済みならその点数、未プレイなら null。 */

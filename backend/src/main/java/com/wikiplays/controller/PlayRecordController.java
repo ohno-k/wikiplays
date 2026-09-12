@@ -33,10 +33,22 @@ public class PlayRecordController {
         this.xpService = xpService;
     }
 
+    /** クライアント採点のモード。A モードとデイリーは /api/game のセッション経由でのみ記録される。 */
+    private static final java.util.Set<String> CLIENT_SCORED_MODES = java.util.Set.of("b", "c", "d", "e");
+
     /** プレイ結果を記録 (匿名 OK、ログインなら user_id 紐付け)。 */
     @PostMapping("/record")
     public ResponseEntity<?> record(@RequestBody PlayRecordSubmit req, Authentication auth) {
         User user = (auth != null && auth.getPrincipal() instanceof User u) ? u : null;
+        if (req.mode() == null || !CLIENT_SCORED_MODES.contains(req.mode())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "このモードの結果はゲームセッション経由で記録されます"));
+        }
+        if (user == null && (req.playerId() == null || req.playerId().isBlank())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "playerId が必要です"));
+        }
+        if (!quotaService.canPlay(user, req.playerId())) {
+            return ResponseEntity.status(429).body(Map.of("message", "今日のプレイ上限に達しました"));
+        }
         PlayRecord r = new PlayRecord();
         r.setUserId(user != null ? user.getId() : null);
         r.setPlayerId(user == null ? req.playerId() : null);
@@ -44,9 +56,10 @@ public class PlayRecordController {
         r.setGenre(req.genre());
         r.setScope(req.scope());
         r.setCommunityGenreId(req.communityGenreId());
-        int clampedScore = Math.max(0, Math.min(req.score(), 100_000));
+        int maxScore = Math.max(1, Math.min(req.maxScore(), 5_000));
+        int clampedScore = Math.max(0, Math.min(req.score(), maxScore));
         r.setScore(clampedScore);
-        r.setMaxScore(Math.max(1, Math.min(req.maxScore(), 100_000)));
+        r.setMaxScore(maxScore);
         r.setDifficulty(req.difficulty());
         r.setPlayedAt(Instant.now());
         repository.save(r);
@@ -64,6 +77,7 @@ public class PlayRecordController {
             body.put("xpIntoLevel", xp.info().xpIntoLevel());
             body.put("xpForNextLevel", xp.info().xpForNextLevel());
             body.put("dailyRemaining", xp.info().dailyRemaining());
+            body.put("streakDays", xp.info().streakDays());
         }
         return ResponseEntity.ok(body);
     }

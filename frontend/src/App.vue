@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import { useAuth } from './composables/useAuth'
+import { levelTitle } from './scoring'
 
 const { isLoggedIn, isPremium, user, refresh } = useAuth()
 
@@ -37,9 +38,13 @@ onMounted(() => {
             class="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition flex items-center gap-1.5">
             <span v-if="isPremium" class="text-amber-500">⭐</span>
             <span v-if="user?.level != null"
+              :title="levelTitle(user.level)"
               class="inline-flex items-center justify-center min-w-[1.5rem] h-5 px-1.5 rounded-full
                      bg-gradient-to-r from-sky-500 to-indigo-500 text-white text-[0.7rem] font-bold leading-none shadow-sm">
               Lv.{{ user.level }}
+            </span>
+            <span v-if="user?.streakDays" class="text-xs text-orange-500 font-bold" title="連続プレイ日数">
+              🔥{{ user.streakDays }}
             </span>
             <span>{{ user?.displayName }}</span>
           </RouterLink>
