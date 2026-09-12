@@ -17,4 +17,7 @@ public interface DailyScoreRepository extends JpaRepository<DailyScore, Long> {
 
     /** チャレンジ全体の挑戦者数。 */
     long countByDailyChallengeId(Long dailyChallengeId);
+
+    /** あるプレイヤーの全スコア (表示名の付け替え用)。 */
+    List<DailyScore> findByPlayerId(String playerId);
 }
