@@ -148,6 +148,7 @@ public class CommunityGenrePoolWarmer {
             entity.setDataJson(objectMapper.writeValueAsString(data));
             entity.setExtractedYear(data.extractedYear());
             entity.setExtractedYearKind(data.extractedYearKind());
+            entity.setFameScore(FameScorer.score(data));
             entity.setCreatedAt(Instant.now());
             entity.setLastUsedAt(Instant.now());
             cachedArticleRepository.save(entity);

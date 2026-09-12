@@ -44,12 +44,14 @@ public class ArticleController {
     /**
      * フィルタ通過する記事を 1 件返す (B〜E モード用)。
      * まず記事プール (DB) から、ヒットしなければ Wikipedia から取得して DB に追加。
+     * fameTier (1 = 超メジャー 〜 5 = 超マニアック) を指定すると、その知名度帯の記事を優先する。
      * Free プランの 1 日上限に達している場合は 429。
      */
     @GetMapping("/random")
     public ResponseEntity<?> random(
         @RequestParam(value = "genre", required = false) String genre,
         @RequestParam(value = "scope", required = false) String scope,
+        @RequestParam(value = "fameTier", required = false) Integer fameTier,
         @RequestParam(value = "playerId", required = false) String playerId,
         Authentication auth
     ) {
@@ -57,7 +59,7 @@ public class ArticleController {
         if (!quotaService.canPlay(user, playerId)) {
             return ResponseEntity.status(429).body(java.util.Map.of("message", "今日のプレイ上限に達しました"));
         }
-        Optional<ArticleData> data = articlePool.getRandom(scope, genre);
+        Optional<ArticleData> data = articlePool.getRandom(scope, genre, fameTier);
         return data.<ResponseEntity<?>>map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.status(503).build());
     }
 

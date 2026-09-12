@@ -1,4 +1,5 @@
 import type { ArticleData, Genre, ModeId, PlayMode, Scope } from './types'
+import type { FameTier } from './fameTier'
 
 /** サーバーが返す { message } を取り出してエラーにする。 */
 async function errorFrom(res: Response, fallback: string): Promise<Error> {
@@ -18,11 +19,20 @@ function authHeaders(token?: string | null, json = false): Record<string, string
   return h
 }
 
-/** B〜E モード用のランダム記事。Free プランの 1 日上限に達していると 429。 */
-export async function fetchRandomArticle(genre?: Genre | null, scope?: Scope | null, token?: string | null): Promise<ArticleData> {
+/**
+ * B〜E モード用のランダム記事。Free プランの 1 日上限に達していると 429。
+ * fameTier (1 = 超メジャー 〜 5 = 超マニアック) を渡すとその知名度帯の記事を優先する。
+ */
+export async function fetchRandomArticle(
+  genre?: Genre | null,
+  scope?: Scope | null,
+  token?: string | null,
+  fameTier?: FameTier | null,
+): Promise<ArticleData> {
   const params = new URLSearchParams()
   if (genre) params.set('genre', genre)
   if (scope) params.set('scope', scope)
+  if (fameTier != null) params.set('fameTier', String(fameTier))
   params.set('playerId', getPlayerId())
   const res = await fetch(`/api/article/random?${params.toString()}`, { headers: authHeaders(token) })
   if (res.status === 429) throw new QuotaExceededError()
@@ -98,6 +108,8 @@ export interface GameSessionView {
   communityGenreId: number | null
   dailyChallengeId: number | null
   difficulty: 'relaxed' | 'normal' | 'speed'
+  /** 選択した記事の知名度 tier。null は指定なし。 */
+  fameTier: FameTier | null
   intervalMs: number
   totalQuestions: number
   index: number
@@ -115,6 +127,8 @@ export interface StartGameRequest {
   communityGenreId?: number | null
   dailyChallengeId?: number | null
   difficulty?: string
+  /** 記事の知名度 tier (1〜5)。省略・null は指定なし。 */
+  fameTier?: FameTier | null
 }
 
 async function gameCall(path: string, body: Record<string, unknown>, token?: string | null): Promise<GameSessionView> {

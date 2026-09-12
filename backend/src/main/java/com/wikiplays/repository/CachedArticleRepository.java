@@ -5,6 +5,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import org.springframework.data.domain.Pageable;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -36,6 +38,30 @@ public interface CachedArticleRepository extends JpaRepository<CachedArticle, Lo
         @Param("genre") String genre,
         @Param("n") int n
     );
+
+    /**
+     * scope, genre 指定 + 知名度 tier 指定で count 件返す。
+     * tier は同じ (scope, genre) バケット内で fame_score の高い順に 5 等分した順位 (1 = 最も有名)。
+     * スコア未計算 (null) の記事は対象外。
+     */
+    @Query(value =
+        "SELECT * FROM (" +
+        "  SELECT c.*, NTILE(" + com.wikiplays.service.FameScorer.TIERS + ") OVER (ORDER BY c.fame_score DESC, c.id) AS fame_tier " +
+        "  FROM cached_article c " +
+        "  WHERE (:scope IS NULL OR c.scope = :scope) AND (:genre IS NULL OR c.genre = :genre) " +
+        "    AND c.fame_score IS NOT NULL" +
+        ") t WHERE t.fame_tier = :tier " +
+        "ORDER BY RANDOM() LIMIT :n",
+        nativeQuery = true)
+    List<CachedArticle> findRandomSampleByFameTier(
+        @Param("scope") String scope,
+        @Param("genre") String genre,
+        @Param("tier") int tier,
+        @Param("n") int n
+    );
+
+    /** 知名度スコア未計算の記事 (バックフィル用)。 */
+    List<CachedArticle> findByFameScoreIsNull(Pageable pageable);
 
     /** scope, genre のキャッシュ件数。 */
     long countByScopeAndGenre(String scope, String genre);

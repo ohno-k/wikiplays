@@ -42,6 +42,11 @@ import { MODES } from '../types'
             選択した難易度のペースで自動的に段落が追加されます (のんびり 20s / ふつう 10s / 早押し 5s)。
           </div>
           <div>
+            <span class="font-bold">記事の知名度:</span> 出題前に <span class="text-blue-700 font-bold">超メジャー 〜 超マニアック</span> の 5 段階 (または おまかせ) を選べます。
+            各記事の知名度は他言語版の数・記事の長さ・別名の多さから算出し、選んだジャンル内で順位づけして 5 等分しています。
+            B〜E モードでも同じ選択が使えます。
+          </div>
+          <div>
             <span class="font-bold">回答方式:</span> 答えのタイトルを <span class="text-blue-700 font-bold">1 文字ずつ 4 択</span> から選択。
             <span class="text-emerald-700 font-bold">最初の 1 文字を選んだ時点でタイマーが止まり</span>、その段落数でスコアが確定します。
             入力に時間がかかっても減点されません。

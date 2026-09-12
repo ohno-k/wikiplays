@@ -2,12 +2,14 @@
 import { ref, computed, watch } from 'vue'
 import ModeLayout from './ModeLayout.vue'
 import GenrePicker from '../../components/GenrePicker.vue'
+import FameTierPicker from '../../components/FameTierPicker.vue'
 import CurrentGenreBadge from '../../components/CurrentGenreBadge.vue'
 import { fetchDecoys } from '../../api'
 import type { ArticleData, Genre, Scope } from '../../types'
 import { isCorrect, scoreEmoji } from '../../scoring'
 import { maskTitle, splitSentences } from '../../masking'
 import { useArticleQueue } from '../../composables/useArticleQueue'
+import { useFameTier } from '../../composables/useFameTier'
 import { useSessionRecorder } from '../../composables/useSessionRecorder'
 import { useAuth } from '../../composables/useAuth'
 import XpResultCard from '../../components/XpResultCard.vue'
@@ -166,6 +168,7 @@ async function openCard(key: HintKey) {
 const selectedGenre = ref<Genre | null>(null)
 const selectedScope = ref<Scope>('jp')
 const started = ref(false)
+const { fameTier } = useFameTier()
 
 const { token, isLoggedIn } = useAuth()
 const recorder = useSessionRecorder('b')
@@ -173,6 +176,7 @@ const recorder = useSessionRecorder('b')
 const queue = useArticleQueue<ArticleData>({
   genre: selectedGenre,
   scope: selectedScope,
+  fameTier,
   token,
   prepare: (a) => {
     if (!a.introExtract || a.introExtract.length < 30) return null
@@ -255,14 +259,16 @@ watch(finished, (v) => {
 
 <template>
   <ModeLayout mode-name="ヒントカード" short-name="B モード" emoji="🃏" theme="purple" gradient="from-fuchsia-500 to-purple-600">
-    <GenrePicker
-      v-if="!started"
-      mode-name="B モード"
-      theme-gradient="from-fuchsia-500 to-purple-600"
-      @select="onGenreSelected" />
+    <template v-if="!started">
+      <FameTierPicker v-model="fameTier" />
+      <GenrePicker
+        mode-name="B モード"
+        theme-gradient="from-fuchsia-500 to-purple-600"
+        @select="onGenreSelected" />
+    </template>
 
     <template v-else>
-      <CurrentGenreBadge :genre="selectedGenre" :scope="selectedScope" @change="changeGenre" />
+      <CurrentGenreBadge :genre="selectedGenre" :scope="selectedScope" :fame-tier="fameTier" @change="changeGenre" />
 
       <p class="text-sm text-slate-600">
         ヒントカードを開くたびにコストが引かれます。<span class="font-bold">安いカードで効率的に当てた人が高得点</span>。

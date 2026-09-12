@@ -18,6 +18,7 @@ import com.wikiplays.service.ArticleJson;
 import com.wikiplays.service.ArticlePoolService;
 import com.wikiplays.service.CommunityGenrePoolWarmer;
 import com.wikiplays.service.DailyChallengeService;
+import com.wikiplays.service.FameScorer;
 import com.wikiplays.service.PlayQuotaService;
 import com.wikiplays.service.XpService;
 import org.slf4j.Logger;
@@ -100,6 +101,8 @@ public class GameSessionService {
         Long communityGenreId,
         Long dailyChallengeId,
         String difficulty,
+        /** 記事の知名度 tier (1 = 超メジャー 〜 5 = 超マニアック)。null は指定なし。 */
+        Integer fameTier,
         String playerId
     ) {}
 
@@ -161,7 +164,8 @@ public class GameSessionService {
                 String genre = blankToNull(req.genre());
                 s.setScope(genre == null ? null : scope);
                 s.setGenre(genre);
-                articles = pickPoolArticles(s.getScope(), s.getGenre());
+                s.setFameTier(FameScorer.normalizeTier(req.fameTier()));
+                articles = pickPoolArticles(s.getScope(), s.getGenre(), s.getFameTier());
             }
             if (articles.isEmpty()) throw new GameException(503, "適切な記事が見つかりませんでした。少し待ってからもう一度試してください。");
         }
@@ -207,9 +211,24 @@ public class GameSessionService {
             .orElseThrow(() -> new GameException(503, "今日の問題がまだ準備中です。少し待ってからもう一度試してください。"));
     }
 
-    private List<ArticleData> pickPoolArticles(String scope, String genre) {
+    /**
+     * プールから 5 問分を選ぶ。
+     * 知名度 tier 指定があればその tier から優先して取り、足りなければ tier を問わず補う
+     * (プールが薄い間に 503 で遊べなくなるより、多少ずれた記事が混ざる方がまし)。
+     */
+    private List<ArticleData> pickPoolArticles(String scope, String genre, Integer fameTier) {
         List<ArticleData> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
+        if (fameTier != null) {
+            for (ArticleData a : articlePool.getRandomSample(scope, genre, fameTier, TOTAL_QUESTIONS * 3)) {
+                if (out.size() >= TOTAL_QUESTIONS) break;
+                if (seen.add(a.title()) && prepare(a, false) != null) out.add(a);
+            }
+            if (out.size() < TOTAL_QUESTIONS) {
+                log.debug("fame tier {} pool thin for scope={} genre={} (got {}); topping up without tier",
+                    fameTier, scope, genre, out.size());
+            }
+        }
         for (ArticleData a : articlePool.getRandomSample(scope, genre, TOTAL_QUESTIONS * 3)) {
             if (out.size() >= TOTAL_QUESTIONS) break;
             if (seen.add(a.title()) && prepare(a, false) != null) out.add(a);
@@ -498,7 +517,7 @@ public class GameSessionService {
         }
         return new SessionView(
             s.getId(), s.getMode(), s.getGenre(), s.getScope(), s.getCommunityGenreId(), s.getDailyChallengeId(),
-            s.getDifficulty(), s.getRevealIntervalMs(), state.questions.size(), state.current,
+            s.getDifficulty(), s.getFameTier(), s.getRevealIntervalMs(), state.questions.size(), state.current,
             s.isFinished(), s.getTotalScore(), MAX_SCORE_PER_QUESTION * state.questions.size(), qv, summary
         );
     }

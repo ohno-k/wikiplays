@@ -11,6 +11,8 @@ public record SessionView(
     Long communityGenreId,
     Long dailyChallengeId,
     String difficulty,
+    /** 選択した記事の知名度 tier (1〜5)。null は指定なし。 */
+    Integer fameTier,
     int intervalMs,
     int totalQuestions,
     int index,
