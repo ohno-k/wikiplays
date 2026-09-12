@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue'
 import type { ArticleData, Genre, Scope } from '../types'
+import type { FameTier } from '../fameTier'
 import { fetchRandomArticle, fetchCommunityRandomArticle, QuotaExceededError } from '../api'
 
 /**
@@ -26,6 +27,8 @@ export interface ArticleQueueOptions<T> {
   scope?: Ref<Scope>
   /** コミュニティジャンル ID。指定されたら通常ジャンルより優先。 */
   communityGenreId?: Ref<number | null>
+  /** 記事の知名度 tier (1〜5)。null は指定なし。コミュニティジャンルでは使われない。 */
+  fameTier?: Ref<FameTier | null>
   /** ログイン中の JWT (Premium 検証・Free 上限判定用)。 */
   token?: Ref<string | null>
 }
@@ -60,7 +63,7 @@ export function useArticleQueue<T>(options: ArticleQueueOptions<T>) {
           : undefined
         const a = communityId != null
           ? await fetchCommunityRandomArticle(communityId, options.token?.value, excludeTitles)
-          : await fetchRandomArticle(options.genre?.value, options.scope?.value, options.token?.value)
+          : await fetchRandomArticle(options.genre?.value, options.scope?.value, options.token?.value, options.fameTier?.value)
         // 直前の記事と同一なら最大試行の半分まで強制スキップ (back-to-back 防止)
         if (a.title === lastTitle && lastTitleSkips < Math.floor(maxAttempts / 2)) {
           lastTitleSkips++

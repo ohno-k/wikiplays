@@ -20,7 +20,8 @@ import java.time.Instant;
     indexes = {
         @Index(name = "idx_cached_article_scope_genre", columnList = "scope,genre"),
         @Index(name = "idx_cached_article_title", columnList = "title", unique = true),
-        @Index(name = "idx_cached_article_community", columnList = "community_genre_id")
+        @Index(name = "idx_cached_article_community", columnList = "community_genre_id"),
+        @Index(name = "idx_cached_article_fame", columnList = "scope,genre,fame_score")
     }
 )
 public class CachedArticle {
@@ -55,6 +56,13 @@ public class CachedArticle {
     @Column(length = 16)
     private String extractedYearKind;
 
+    /**
+     * 主題の知名度スコア (FameScorer)。大きいほど有名。
+     * null は未計算 (旧キャッシュ)。起動時のバックフィルで埋まる。
+     */
+    @Column(name = "fame_score")
+    private Double fameScore;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -77,6 +85,8 @@ public class CachedArticle {
     public void setExtractedYear(Integer extractedYear) { this.extractedYear = extractedYear; }
     public String getExtractedYearKind() { return extractedYearKind; }
     public void setExtractedYearKind(String extractedYearKind) { this.extractedYearKind = extractedYearKind; }
+    public Double getFameScore() { return fameScore; }
+    public void setFameScore(Double fameScore) { this.fameScore = fameScore; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getLastUsedAt() { return lastUsedAt; }

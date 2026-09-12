@@ -55,6 +55,10 @@ public class GameSession {
     @Column(name = "reveal_interval_ms", nullable = false)
     private int revealIntervalMs;
 
+    /** プレイヤーが選んだ記事の知名度 tier (1 = 超メジャー 〜 5 = 超マニアック)。null は指定なし。 */
+    @Column(name = "fame_tier")
+    private Integer fameTier;
+
     /** 問題・進行状態の JSON (SessionState)。 */
     @Column(name = "state_json", nullable = false, columnDefinition = "TEXT")
     private String stateJson;
@@ -91,6 +95,8 @@ public class GameSession {
     public void setCommunityGenreId(Long communityGenreId) { this.communityGenreId = communityGenreId; }
     public Long getDailyChallengeId() { return dailyChallengeId; }
     public void setDailyChallengeId(Long dailyChallengeId) { this.dailyChallengeId = dailyChallengeId; }
+    public Integer getFameTier() { return fameTier; }
+    public void setFameTier(Integer fameTier) { this.fameTier = fameTier; }
     public String getDifficulty() { return difficulty; }
     public void setDifficulty(String difficulty) { this.difficulty = difficulty; }
     public int getRevealIntervalMs() { return revealIntervalMs; }

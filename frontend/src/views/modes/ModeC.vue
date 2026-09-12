@@ -2,12 +2,14 @@
 import { ref, computed, watch } from 'vue'
 import ModeLayout from './ModeLayout.vue'
 import GenrePicker from '../../components/GenrePicker.vue'
+import FameTierPicker from '../../components/FameTierPicker.vue'
 import CurrentGenreBadge from '../../components/CurrentGenreBadge.vue'
 import type { ArticleData, YearKind, Genre, Scope } from '../../types'
 import { YEAR_KIND_LABELS } from '../../types'
 import { scoreEmoji } from '../../scoring'
 import { maskTitle, maskYears } from '../../masking'
 import { useArticleQueue } from '../../composables/useArticleQueue'
+import { useFameTier } from '../../composables/useFameTier'
 import { useSessionRecorder } from '../../composables/useSessionRecorder'
 import { useAuth } from '../../composables/useAuth'
 import XpResultCard from '../../components/XpResultCard.vue'
@@ -58,6 +60,7 @@ function safeCategories(a: ArticleData): string[] {
 const selectedGenre = ref<Genre | null>(null)
 const selectedScope = ref<Scope>('jp')
 const started = ref(false)
+const { fameTier } = useFameTier()
 
 const { token, isLoggedIn } = useAuth()
 const recorder = useSessionRecorder('c')
@@ -65,6 +68,7 @@ const recorder = useSessionRecorder('c')
 const queue = useArticleQueue<ArticleData>({
   genre: selectedGenre,
   scope: selectedScope,
+  fameTier,
   token,
   prepare: (a) => {
     if (a.extractedYear === null || a.extractedYearKind === null) return null
@@ -165,14 +169,16 @@ function yearLabel(y: number): string {
 
 <template>
   <ModeLayout mode-name="年代あて" short-name="C モード" emoji="🎯" theme="emerald" gradient="from-emerald-500 to-teal-600">
-    <GenrePicker
-      v-if="!started"
-      mode-name="C モード"
-      theme-gradient="from-emerald-500 to-teal-600"
-      @select="onGenreSelected" />
+    <template v-if="!started">
+      <FameTierPicker v-model="fameTier" />
+      <GenrePicker
+        mode-name="C モード"
+        theme-gradient="from-emerald-500 to-teal-600"
+        @select="onGenreSelected" />
+    </template>
 
     <template v-else>
-      <CurrentGenreBadge :genre="selectedGenre" :scope="selectedScope" @change="changeGenre" />
+      <CurrentGenreBadge :genre="selectedGenre" :scope="selectedScope" :fame-tier="fameTier" @change="changeGenre" />
 
       <p class="text-sm text-slate-600">
         ① まず粗いスライダーで世紀のあたりをつけ、② その周辺で細かく微調整します。

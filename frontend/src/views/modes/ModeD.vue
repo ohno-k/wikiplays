@@ -2,12 +2,14 @@
 import { ref, computed, watch } from 'vue'
 import ModeLayout from './ModeLayout.vue'
 import GenrePicker from '../../components/GenrePicker.vue'
+import FameTierPicker from '../../components/FameTierPicker.vue'
 import CurrentGenreBadge from '../../components/CurrentGenreBadge.vue'
 import { fetchDecoys } from '../../api'
 import type { ArticleData, Genre, Scope } from '../../types'
 import { scoreEmoji } from '../../scoring'
 import { maskTitle, firstSentence } from '../../masking'
 import { useArticleQueue } from '../../composables/useArticleQueue'
+import { useFameTier } from '../../composables/useFameTier'
 import { useSessionRecorder } from '../../composables/useSessionRecorder'
 import { useAuth } from '../../composables/useAuth'
 import XpResultCard from '../../components/XpResultCard.vue'
@@ -67,6 +69,7 @@ function shuffle<T>(arr: T[]): T[] {
 const selectedGenre = ref<Genre | null>(null)
 const selectedScope = ref<Scope>('jp')
 const started = ref(false)
+const { fameTier } = useFameTier()
 
 const { token, isLoggedIn } = useAuth()
 const recorder = useSessionRecorder('d')
@@ -74,6 +77,7 @@ const recorder = useSessionRecorder('d')
 const queue = useArticleQueue<ModeDData>({
   genre: selectedGenre,
   scope: selectedScope,
+  fameTier,
   token,
   prepare: async (a) => {
     if (a.categories.length === 0) return null
@@ -181,14 +185,16 @@ watch(finished, (v) => {
 
 <template>
   <ModeLayout mode-name="4 択クイズ" short-name="D モード" emoji="🔍" theme="amber" gradient="from-amber-500 to-orange-600">
-    <GenrePicker
-      v-if="!started"
-      mode-name="D モード"
-      theme-gradient="from-amber-500 to-orange-600"
-      @select="onGenreSelected" />
+    <template v-if="!started">
+      <FameTierPicker v-model="fameTier" />
+      <GenrePicker
+        mode-name="D モード"
+        theme-gradient="from-amber-500 to-orange-600"
+        @select="onGenreSelected" />
+    </template>
 
     <template v-else>
-      <CurrentGenreBadge :genre="selectedGenre" :scope="selectedScope" @change="changeGenre" />
+      <CurrentGenreBadge :genre="selectedGenre" :scope="selectedScope" :fame-tier="fameTier" @change="changeGenre" />
 
       <p class="text-sm text-slate-600">
         4 つの選択肢から正解の記事を選んでください。ヒントを追加するたびに減点されます。

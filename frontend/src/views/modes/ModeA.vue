@@ -5,6 +5,7 @@ import ModeLayout from './ModeLayout.vue'
 import GenrePicker from '../../components/GenrePicker.vue'
 import CurrentGenreBadge from '../../components/CurrentGenreBadge.vue'
 import CharInputBoard from '../../components/CharInputBoard.vue'
+import FameTierPicker from '../../components/FameTierPicker.vue'
 import XpResultCard from '../../components/XpResultCard.vue'
 import ResultShareCard from '../../components/ResultShareCard.vue'
 import type { Genre, Scope } from '../../types'
@@ -12,6 +13,7 @@ import { scoreEmoji } from '../../scoring'
 import { fetchCommunityGenres, fetchPlayQuota, recordPlay, type CommunityGenre, type PlayQuota } from '../../api'
 import { useAuth } from '../../composables/useAuth'
 import { useGameSession } from '../../composables/useGameSession'
+import { useFameTier } from '../../composables/useFameTier'
 
 const { token, isLoggedIn, refresh: refreshAuth } = useAuth()
 const route = useRoute()
@@ -25,6 +27,7 @@ const DIFFICULTIES: DifficultyMeta[] = [
   { id: 'speed',   name: '早押し',   emoji: '⚡', description: '5 秒ごとに 1 段落 (上級者向け)' },
 ]
 const selectedDifficulty = ref<Difficulty>('normal')
+const { fameTier } = useFameTier()
 
 const selectedGenre = ref<Genre | null>(null)
 const selectedScope = ref<Scope>('jp')
@@ -57,6 +60,8 @@ async function startSession() {
     scope: selectedCommunityGenreId.value != null ? null : selectedScope.value,
     communityGenreId: selectedCommunityGenreId.value,
     difficulty: selectedDifficulty.value,
+    // コミュニティジャンルは記事数が少なく知名度で絞れないので送らない
+    fameTier: selectedCommunityGenreId.value != null ? null : fameTier.value,
   })
   if (!ok && quotaExceeded.value) {
     started.value = false
@@ -114,6 +119,7 @@ async function tryStartFromQuery() {
     selectedGenre.value = view.value?.genre ?? null
     selectedScope.value = view.value?.scope ?? 'jp'
     selectedDifficulty.value = view.value?.difficulty ?? 'normal'
+    if (view.value?.communityGenreId == null) fameTier.value = view.value?.fameTier ?? null
     if (view.value?.communityGenreId != null) {
       selectedCommunityGenreId.value = view.value.communityGenreId
       try {
@@ -207,6 +213,7 @@ onMounted(() => { refreshQuota(); tryStartFromQuery() })
         </button>
         <span class="text-xs text-slate-400 ml-auto">{{ DIFFICULTIES.find(d => d.id === selectedDifficulty)?.description }}</span>
       </div>
+      <FameTierPicker v-model="fameTier" />
       <GenrePicker
         mode-name="A モード"
         theme-gradient="from-sky-500 to-indigo-600"
@@ -220,6 +227,7 @@ onMounted(() => { refreshQuota(); tryStartFromQuery() })
         :genre="selectedGenre"
         :scope="selectedScope"
         :community-genre-name="selectedCommunityGenreName || undefined"
+        :fame-tier="selectedCommunityGenreId != null ? null : (view?.fameTier ?? fameTier)"
         @change="changeGenre" />
 
       <p class="text-sm text-slate-600">

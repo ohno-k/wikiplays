@@ -7,6 +7,7 @@ import com.wikiplays.entity.CachedArticle;
 import com.wikiplays.repository.CachedArticleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +27,7 @@ public class ArticlePoolService {
     private static final Logger log = LoggerFactory.getLogger(ArticlePoolService.class);
 
     /** 各 (scope, genre) ごとに保持したい記事数の目安。 */
-    private static final long TARGET_PER_BUCKET = 80;
+    private static final long TARGET_PER_BUCKET = 150; // 知名度 5 段階 × 各 30 件を目安
     /** 起動時の即時補充で 1 バケットあたり追加する最大件数。 */
     private static final int INITIAL_REFILL_PER_BUCKET = 5;
     /** バックグラウンド補充で 1 バケットあたり追加する最大件数。 */
@@ -61,6 +62,22 @@ public class ArticlePoolService {
         return fetchAndStore(normScope, normGenre);
     }
 
+    /**
+     * 知名度 tier を指定してランダムに 1 件。該当 tier に記事が無ければ tier 無視で取得する。
+     *
+     * @param fameTier 1 (超メジャー) 〜 5 (超マニアック)。null なら指定なし
+     */
+    @Transactional
+    public Optional<ArticleData> getRandom(String scope, String genre, Integer fameTier) {
+        Integer tier = FameScorer.normalizeTier(fameTier);
+        if (tier != null) {
+            java.util.List<ArticleData> hit = getRandomSample(scope, genre, tier, 1);
+            if (!hit.isEmpty()) return Optional.of(hit.get(0));
+            log.debug("fame tier {} is empty for scope={} genre={}; falling back", tier, scope, genre);
+        }
+        return getRandom(scope, genre);
+    }
+
     /** タイトル指定で DB から記事を取得。 */
     @Transactional
     public Optional<ArticleData> findByTitle(String title) {
@@ -78,6 +95,43 @@ public class ArticlePoolService {
             deserialize(c).ifPresent(result::add);
         }
         return result;
+    }
+
+    /** 知名度 tier 指定で count 件 (tier に無ければ少なく返る。補充は呼び出し側で行う)。 */
+    @Transactional
+    public java.util.List<ArticleData> getRandomSample(String scope, String genre, int fameTier, int count) {
+        java.util.List<CachedArticle> entries = repository.findRandomSampleByFameTier(
+            normalize(scope), normalize(genre), fameTier, count);
+        java.util.List<ArticleData> result = new java.util.ArrayList<>();
+        for (CachedArticle c : entries) {
+            c.setLastUsedAt(Instant.now());
+            deserialize(c).ifPresent(result::add);
+        }
+        return result;
+    }
+
+    /**
+     * 知名度スコア未計算の記事に FameScorer の値を書き込む。
+     * fame_score 列を追加する前にキャッシュされた記事のための一度きりの処理 (起動時に呼ぶ)。
+     *
+     * @return 更新した件数
+     */
+    @Transactional
+    public int backfillFameScores() {
+        int updated = 0;
+        while (true) {
+            java.util.List<CachedArticle> batch = repository.findByFameScoreIsNull(PageRequest.of(0, 200));
+            if (batch.isEmpty()) break;
+            for (CachedArticle c : batch) {
+                // 壊れた JSON は 0 点にしてループを終わらせる (tier 5 相当に落ちるだけ)
+                c.setFameScore(deserialize(c).map(FameScorer::score).orElse(0.0));
+            }
+            repository.saveAll(batch);
+            repository.flush();
+            updated += batch.size();
+        }
+        if (updated > 0) log.info("fame score backfill: updated {} articles", updated);
+        return updated;
     }
 
     /**
@@ -113,6 +167,7 @@ public class ArticlePoolService {
             entity.setDataJson(objectMapper.writeValueAsString(data));
             entity.setExtractedYear(data.extractedYear());
             entity.setExtractedYearKind(data.extractedYearKind());
+            entity.setFameScore(FameScorer.score(data));
             entity.setCreatedAt(Instant.now());
             entity.setLastUsedAt(Instant.now());
             repository.save(entity);
