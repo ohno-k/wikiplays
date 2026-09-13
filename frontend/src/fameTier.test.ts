@@ -20,6 +20,6 @@ describe('fameTier', () => {
   it('falls back to おまかせ for unknown ids', () => {
     expect(fameTierMeta(null).name).toBe('おまかせ')
     expect(fameTierMeta(undefined).id).toBeNull()
-    expect(fameTierMeta(1).name).toBe('超メジャー')
+    expect(fameTierMeta(1).name).toBe('常識レベル')
   })
 })

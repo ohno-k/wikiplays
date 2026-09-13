@@ -16,7 +16,7 @@ public record ArticleData(
     Map<String, String> infobox,   // インフォボックス key→value
     List<String> categories,       // 所属カテゴリ
     int languageLinkCount,         // 他言語版の数
-    Integer recentPageViews,       // 直近の閲覧数 (取れない場合 null)
+    Integer recentPageViews,       // 直近 60 日の 1 日あたり平均閲覧数 (取れない場合 null) — 知名度の基準
     int articleLength,             // 記事のバイト長
     String pageUrl,                // Wikipedia の記事 URL
     Integer extractedYear,         // 主題に紐づく年 (取れない場合 null) — モード C 用
@@ -26,5 +26,11 @@ public record ArticleData(
     /** 旧キャッシュ (aliases 無し) を読んだときも null にならないようにする。 */
     public List<String> aliases() {
         return aliases == null ? List.of() : aliases;
+    }
+
+    /** 閲覧数だけ差し替えたコピー (旧キャッシュへの閲覧数バックフィル用)。 */
+    public ArticleData withRecentPageViews(Integer views) {
+        return new ArticleData(title, introExtract, fullExtract, sections, imageUrls, infobox, categories,
+            languageLinkCount, views, articleLength, pageUrl, extractedYear, extractedYearKind, aliases);
     }
 }

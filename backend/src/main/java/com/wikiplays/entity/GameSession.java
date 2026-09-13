@@ -55,7 +55,7 @@ public class GameSession {
     @Column(name = "reveal_interval_ms", nullable = false)
     private int revealIntervalMs;
 
-    /** プレイヤーが選んだ記事の知名度 tier (1 = 超メジャー 〜 5 = 超マニアック)。null は指定なし。 */
+    /** プレイヤーが選んだ記事の知名度 tier (1 = 常識レベル 〜 5 = 超マニアック)。null は指定なし。 */
     @Column(name = "fame_tier")
     private Integer fameTier;
 

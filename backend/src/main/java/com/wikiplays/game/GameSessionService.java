@@ -101,7 +101,7 @@ public class GameSessionService {
         Long communityGenreId,
         Long dailyChallengeId,
         String difficulty,
-        /** 記事の知名度 tier (1 = 超メジャー 〜 5 = 超マニアック)。null は指定なし。 */
+        /** 記事の知名度 tier (1 = 常識レベル 〜 5 = 超マニアック)。null は指定なし。 */
         Integer fameTier,
         String playerId
     ) {}
@@ -213,14 +213,15 @@ public class GameSessionService {
 
     /**
      * プールから 5 問分を選ぶ。
-     * 知名度 tier 指定があればその tier から優先して取り、足りなければ tier を問わず補う
+     * 知名度 tier 指定があればその tier (足りなければ近い tier) から優先して取り、
+     * 全 tier 合わせても足りなければ tier を問わず補う
      * (プールが薄い間に 503 で遊べなくなるより、多少ずれた記事が混ざる方がまし)。
      */
     private List<ArticleData> pickPoolArticles(String scope, String genre, Integer fameTier) {
         List<ArticleData> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         if (fameTier != null) {
-            for (ArticleData a : articlePool.getRandomSample(scope, genre, fameTier, TOTAL_QUESTIONS * 3)) {
+            for (ArticleData a : articlePool.pickByTier(scope, genre, fameTier, TOTAL_QUESTIONS * 2)) {
                 if (out.size() >= TOTAL_QUESTIONS) break;
                 if (seen.add(a.title()) && prepare(a, false) != null) out.add(a);
             }
