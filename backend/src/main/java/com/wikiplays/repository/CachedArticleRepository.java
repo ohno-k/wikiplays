@@ -40,25 +40,45 @@ public interface CachedArticleRepository extends JpaRepository<CachedArticle, Lo
     );
 
     /**
-     * scope, genre 指定 + 知名度 tier 指定で count 件返す。
-     * tier は同じ (scope, genre) バケット内で fame_score の高い順に 5 等分した順位 (1 = 最も有名)。
-     * スコア未計算 (null) の記事は対象外。
+     * scope, genre 指定 + 知名度スコアの範囲 [minScore, maxScoreExclusive) で count 件返す。
+     * 範囲は FameScorer の tier 境界 (絶対値) をそのまま渡す。スコア未計算 (null) の記事は対象外。
      */
     @Query(value =
-        "SELECT * FROM (" +
-        "  SELECT c.*, NTILE(" + com.wikiplays.service.FameScorer.TIERS + ") OVER (ORDER BY c.fame_score DESC, c.id) AS fame_tier " +
-        "  FROM cached_article c " +
-        "  WHERE (:scope IS NULL OR c.scope = :scope) AND (:genre IS NULL OR c.genre = :genre) " +
-        "    AND c.fame_score IS NOT NULL" +
-        ") t WHERE t.fame_tier = :tier " +
+        "SELECT * FROM cached_article " +
+        "WHERE (:scope IS NULL OR scope = :scope) AND (:genre IS NULL OR genre = :genre) " +
+        "  AND fame_score IS NOT NULL AND fame_score >= :minScore AND fame_score < :maxScore " +
         "ORDER BY RANDOM() LIMIT :n",
         nativeQuery = true)
-    List<CachedArticle> findRandomSampleByFameTier(
+    List<CachedArticle> findRandomSampleByFameRange(
         @Param("scope") String scope,
         @Param("genre") String genre,
-        @Param("tier") int tier,
+        @Param("minScore") double minScore,
+        @Param("maxScore") double maxScoreExclusive,
         @Param("n") int n
     );
+
+    /** scope, genre 指定で知名度スコアが minScore 以上の記事数 (常識レベルの在庫確認用)。 */
+    @Query(value =
+        "SELECT COUNT(*) FROM cached_article " +
+        "WHERE (:scope IS NULL OR scope = :scope) AND (:genre IS NULL OR genre = :genre) " +
+        "  AND fame_score IS NOT NULL AND fame_score >= :minScore",
+        nativeQuery = true)
+    long countByFameScoreAtLeast(
+        @Param("scope") String scope,
+        @Param("genre") String genre,
+        @Param("minScore") double minScore
+    );
+
+    /**
+     * 閲覧数未取得 (data_json の recentPageViews が null) の記事を id 順に最大 limit 件。
+     * 更新しながら舐めるので offset ではなく「前回の最後の id より大きい」で進める。
+     */
+    @Query(value =
+        "SELECT * FROM cached_article " +
+        "WHERE id > :afterId AND data_json LIKE '%\"recentPageViews\":null%' " +
+        "ORDER BY id LIMIT :n",
+        nativeQuery = true)
+    List<CachedArticle> findWithoutPageViewsAfterId(@Param("afterId") long afterId, @Param("n") int n);
 
     /** 知名度スコア未計算の記事 (バックフィル用)。 */
     List<CachedArticle> findByFameScoreIsNull(Pageable pageable);

@@ -199,4 +199,17 @@ public final class GenreCatalog {
         if (scope == null || genre == null) return List.of();
         return GENRES.getOrDefault(scope + ":" + genre, List.of());
     }
+
+    /** 定義済みの (scope, genre) の組。 */
+    public record Bucket(String scope, String genre) {}
+
+    /** 定義済みの全バケット (順序は固定)。総合 (scope も genre も無し) は含まない。 */
+    public static List<Bucket> allBuckets() {
+        List<Bucket> out = new java.util.ArrayList<>();
+        for (String key : new java.util.TreeSet<>(GENRES.keySet())) {
+            String[] parts = key.split(":", 2);
+            out.add(new Bucket(parts[0], parts[1]));
+        }
+        return out;
+    }
 }

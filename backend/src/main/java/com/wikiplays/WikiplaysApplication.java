@@ -31,8 +31,10 @@ public class WikiplaysApplication {
 
     /**
      * アプリ起動完了後、非同期で記事プールを整える (起動を遅らせないため Async)。
-     * 1. 知名度スコア未計算の旧キャッシュを埋める (fame_score 列追加前の記事)
-     * 2. 各バケットを少量だけ即補充
+     * 1. 知名度スコア未計算の旧キャッシュを埋める (fame_score 列追加前 / 単位変更前の記事)
+     * 2. 各バケットを少量だけ即補充 (常識レベルの記事を含む)
+     * 3. 閲覧数未取得の旧キャッシュに Wikipedia の閲覧数を書き込み、スコアを実測値に置き換える
+     *    (時間がかかるので出題に必要な補充の後に回す)
      */
     @EventListener(ApplicationReadyEvent.class)
     @Async
@@ -43,5 +45,10 @@ public class WikiplaysApplication {
             log.warn("fame score backfill failed: {}", e.getMessage());
         }
         if (initialPopulate) articlePoolService.initialPopulate();
+        try {
+            articlePoolService.backfillPageViews();
+        } catch (Exception e) {
+            log.warn("page view backfill failed: {}", e.getMessage());
+        }
     }
 }

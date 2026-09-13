@@ -71,10 +71,15 @@ public class ArticleFilter {
 
     /**
      * 存命人物は出題対象に含めるが、事件・スキャンダル系の語が本文に少しでも多ければ弾く。
-     * (故人・非人物記事は 5 回、存命人物は 2 回でアウト)
+     * (故人・非人物記事は 5 回、存命人物は 2 回でアウト。いずれも本文 SOFT_LIMIT_CHARS 文字あたり)
+     *
+     * 回数は本文の長さに比例して緩める。有名な題材の記事は本文が数万〜十数万文字あり、
+     * 歴史上の人物なら「事件」「事故」が文脈上何度も出てくるのが普通で、固定回数だと
+     * 常識レベルの記事ほど弾かれてしまう。問題のある記事はこれらの語の「密度」が高い。
      */
     private static final int SOFT_LIMIT_DEFAULT = 5;
     private static final int SOFT_LIMIT_LIVING = 2;
+    private static final int SOFT_LIMIT_CHARS = 20_000;
 
     public boolean isAllowed(ArticleData article) {
         if (article == null) return false;
@@ -115,7 +120,7 @@ public class ArticleFilter {
         }
 
         // 本文の弱キーワード (合計 N 回以上でアウト。存命人物はより厳しく)
-        int softLimit = living ? SOFT_LIMIT_LIVING : SOFT_LIMIT_DEFAULT;
+        int softLimit = softLimitFor(full.length(), living);
         int softHits = 0;
         for (String bw : CONTENT_SOFT_BLOCKLIST) {
             int idx = 0;
@@ -130,6 +135,13 @@ public class ArticleFilter {
         if (nullSafe(article.introExtract()).length() < 80) return false;
 
         return true;
+    }
+
+    /** 本文長に応じた弱キーワードの許容回数 (SOFT_LIMIT_CHARS 文字ごとに基準回数を加算)。 */
+    static int softLimitFor(int fullTextLength, boolean living) {
+        int base = living ? SOFT_LIMIT_LIVING : SOFT_LIMIT_DEFAULT;
+        int units = Math.max(1, (int) Math.ceil(fullTextLength / (double) SOFT_LIMIT_CHARS));
+        return base * units;
     }
 
     private String nullSafe(String s) {

@@ -89,7 +89,8 @@ public class WikipediaService {
             .uri(uri -> uri.path("/w/api.php")
                 .queryParam("action", "query")
                 .queryParam("format", "json")
-                .queryParam("prop", "extracts|images|categories|langlinks|info|redirects")
+                .queryParam("prop", "extracts|images|categories|langlinks|info|redirects|pageviews")
+                .queryParam("pvipdays", PAGEVIEW_DAYS)
                 .queryParam("rdlimit", "max")
                 .queryParam("rdnamespace", 0)
                 .queryParam("explaintext", 1)
@@ -146,13 +147,176 @@ public class WikipediaService {
             infobox,
             categories,
             languageLinkCount,
-            null, // recentPageViews: 取得コストに見合う用途が無いため廃止 (旧キャッシュ互換のため列は残す)
+            parseDailyPageViews(page),
             articleLength,
             buildPageUrl(resolvedTitle),
             yearInfo == null ? null : yearInfo.year,
             yearInfo == null ? null : yearInfo.kind,
             aliases
         );
+    }
+
+    /** 閲覧数を平均する日数 (MediaWiki の prop=pageviews が返せる上限)。 */
+    static final int PAGEVIEW_DAYS = 60;
+
+    /** 1 回の prop=pageviews 呼び出しで指定できるタイトル数の上限。 */
+    private static final int PAGEVIEW_BATCH = 50;
+
+    /** CirrusSearch のクエリ文字列長の上限 (超えるとエラー)。カテゴリ名を束ねるときの目安。 */
+    private static final int SEARCH_QUERY_MAX_CHARS = 280;
+
+    /**
+     * prop=pageviews の結果 ("日付" → 閲覧数 | null) から 1 日あたりの平均閲覧数を求める。
+     * 1 日分も値が無ければ null (未取得扱い)。
+     */
+    static Integer parseDailyPageViews(JsonNode page) {
+        if (page == null) return null;
+        JsonNode pv = page.path("pageviews");
+        if (!pv.isObject()) return null;
+        long total = 0;
+        int days = 0;
+        var it = pv.fields();
+        while (it.hasNext()) {
+            JsonNode v = it.next().getValue();
+            if (v == null || v.isNull() || !v.isNumber()) continue;
+            total += Math.max(0, v.asLong());
+            days++;
+        }
+        if (days == 0) return null;
+        return (int) Math.min(Integer.MAX_VALUE, Math.round((double) total / days));
+    }
+
+    /**
+     * 複数タイトルの 1 日あたり平均閲覧数をまとめて取得する (旧キャッシュのバックフィル用)。
+     * 戻り値のキーは Wikipedia が返す正規化後のタイトル。閲覧数が取れなかった記事は含まれない。
+     */
+    public Map<String, Integer> fetchDailyPageViews(List<String> titles) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        for (int from = 0; from < titles.size(); from += PAGEVIEW_BATCH) {
+            List<String> batch = titles.subList(from, Math.min(titles.size(), from + PAGEVIEW_BATCH));
+            String joined = String.join("|", batch);
+            JsonNode json = wikipediaWebClient.get()
+                .uri(uri -> uri.path("/w/api.php")
+                    .queryParam("action", "query")
+                    .queryParam("format", "json")
+                    .queryParam("prop", "pageviews")
+                    .queryParam("pvipdays", PAGEVIEW_DAYS)
+                    .queryParam("titles", joined)
+                    .build())
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block();
+            if (json == null) continue;
+            for (JsonNode page : json.path("query").path("pages")) {
+                String title = page.path("title").asText("");
+                Integer views = parseDailyPageViews(page);
+                if (!title.isEmpty() && views != null) out.put(title, views);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 指定カテゴリ (複数可) に直接属する記事を「被リンク数の多い順」に返す。
+     * CirrusSearch の incategory: と srsort=incoming_links_desc を使う。
+     * 被リンク数の多い記事 = 他の記事から頻繁に言及される主題 = 誰でも知っている題材の近似。
+     *
+     * @param categories "Category:" 接頭辞なしのカテゴリ名。複数指定は OR
+     * @param offset     何件目から (同じ上位記事ばかりにならないよう呼び出し側でずらす)
+     */
+    public List<String> fetchMostLinkedTitles(List<String> categories, int offset, int limit) {
+        if (categories.isEmpty()) return List.of();
+        String query = "incategory:\"" + String.join("|", categories) + "\"";
+        JsonNode json = wikipediaWebClient.get()
+            .uri(uri -> uri.path("/w/api.php")
+                .queryParam("action", "query")
+                .queryParam("format", "json")
+                .queryParam("list", "search")
+                .queryParam("srsearch", query)
+                .queryParam("srsort", "incoming_links_desc")
+                .queryParam("srnamespace", 0)
+                .queryParam("srlimit", Math.min(Math.max(limit, 1), 50))
+                .queryParam("sroffset", Math.max(offset, 0))
+                .build())
+            .retrieve()
+            .bodyToMono(JsonNode.class)
+            .block();
+
+        List<String> out = new ArrayList<>();
+        if (json == null) return out;
+        for (JsonNode hit : json.path("query").path("search")) {
+            String t = hit.path("title").asText("");
+            if (!t.isEmpty()) out.add(t);
+        }
+        return out;
+    }
+
+    /**
+     * カテゴリ木 (親 + 直下のサブカテゴリ 1 段) から被リンク数の多い記事を集める。
+     * ジャンルのカテゴリは「日本の鉄道路線」のような入れ子の親であることが多く、
+     * 有名な記事 (山手線 など) はサブカテゴリ側にいるため、親だけ検索しても拾えない。
+     *
+     * 親カテゴリの上位、次にサブカテゴリを数個ずつ束ねた検索の上位、の順で返す (重複なし)。
+     *
+     * @param offset 各検索の先頭から飛ばす件数 (呼ぶたびに増やして深い順位まで掘る)
+     */
+    public List<String> fetchMostLinkedInCategoryTree(String category, int offset, int perQuery) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        try {
+            out.addAll(fetchMostLinkedTitles(List.of(category), offset, perQuery));
+        } catch (Exception ignored) {
+            // サブカテゴリ側で再試行
+        }
+        List<String> subcats;
+        try {
+            subcats = fetchSubcategories(category);
+        } catch (Exception e) {
+            return new ArrayList<>(out);
+        }
+        Collections.shuffle(subcats, random);
+        // クエリ長の上限内でサブカテゴリを束ね、最大 3 回まで検索する
+        int queries = 0;
+        List<String> batch = new ArrayList<>();
+        int batchChars = 0;
+        for (String sub : subcats) {
+            if (queries >= 3) break;
+            if (!batch.isEmpty() && batchChars + sub.length() + 1 > SEARCH_QUERY_MAX_CHARS) {
+                queries++;
+                searchInto(batch, offset, perQuery, out);
+                batch = new ArrayList<>();
+                batchChars = 0;
+            }
+            batch.add(sub);
+            batchChars += sub.length() + 1;
+            if (batch.size() >= 8) {
+                queries++;
+                searchInto(batch, offset, perQuery, out);
+                batch = new ArrayList<>();
+                batchChars = 0;
+            }
+        }
+        if (!batch.isEmpty() && queries < 3) searchInto(batch, offset, perQuery, out);
+        return new ArrayList<>(out);
+    }
+
+    private void searchInto(List<String> categories, int offset, int limit, java.util.Set<String> out) {
+        try {
+            out.addAll(fetchMostLinkedTitles(categories, offset, limit));
+        } catch (Exception ignored) {
+            // 1 バッチ失敗しても他のバッチで続ける
+        }
+    }
+
+    /** 指定カテゴリ直下のサブカテゴリ名 ("Category:" 接頭辞なし) を最大 100 件。 */
+    public List<String> fetchSubcategories(String category) {
+        List<String> articles = new ArrayList<>();
+        List<String> subcats = new ArrayList<>();
+        fetchMembersInto(category, 100, null, articles, subcats);
+        List<String> out = new ArrayList<>();
+        for (String s : subcats) {
+            out.add(s.startsWith("Category:") ? s.substring("Category:".length()) : s);
+        }
+        return out;
     }
 
     /** 抽出した年とその意味 (生年・没年・設立年など)。 */

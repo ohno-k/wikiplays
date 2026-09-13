@@ -21,7 +21,7 @@ function authHeaders(token?: string | null, json = false): Record<string, string
 
 /**
  * B〜E モード用のランダム記事。Free プランの 1 日上限に達していると 429。
- * fameTier (1 = 超メジャー 〜 5 = 超マニアック) を渡すとその知名度帯の記事を優先する。
+ * fameTier (1 = 常識レベル 〜 5 = 超マニアック) を渡すとその知名度帯の記事を優先する。
  */
 export async function fetchRandomArticle(
   genre?: Genre | null,
